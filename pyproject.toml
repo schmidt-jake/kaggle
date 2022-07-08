@@ -1,0 +1,27 @@
+[project]
+name = "kaggle"
+description = "Kaggle competition monorepo"
+readme = "README.md"
+python = "^3.9"
+[tool.flake8]
+max-line-length = 120
+
+[tool.isort]
+profile = "google"
+py_version = "39"
+
+[tool.mypy]
+python_version = 3.9
+ignore_missing_imports = true
+implicit_reexport = true
+show_error_codes = true
+strict = true
+exclude = ".venv"
+
+[tool.black]
+line-length = 120
+target-version = ["py39"]
+
+[tool.pytest]
+addopts = ["-s"]
+log_cli = true
