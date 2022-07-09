@@ -7,3 +7,4 @@ mypy
 pip-compile-multi
 pre-commit
 pyproject-flake8
+pytest
