@@ -35,5 +35,5 @@ jobs:
         run: black --config=pyproject.toml --check .
       - name: Run mypy
         run: mypy --config-file=pyproject.toml .
-      # - name: Run tests
-      #   run: python -m pytest -c pyproject.toml tests/
+      - name: Run tests
+        run: python -m pytest -c pyproject.toml .
