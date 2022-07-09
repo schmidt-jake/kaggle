@@ -24,7 +24,6 @@ repos:
       - id: destroyed-symlinks # Detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to.
       - id: detect-aws-credentials # Detects *your* aws credentials from the aws cli credentials file
       - id: detect-private-key # Detects the presence of private keys
-      # - id: double-quote-string-fixer # This hook replaces double quoted strings with single quoted strings
       - id: end-of-file-fixer # Ensures that a file is either empty, or ends with one newline.
       # - id: file-contents-sorter # Sort the lines in specified files (defaults to alphabetical). You must provide list of target files as input in your .pre-commit-config.yaml file.
       - id: fix-byte-order-marker # removes UTF-8 byte order marker
@@ -78,6 +77,16 @@ repos:
         entry: mypy
         args:
           - --config-file=pyproject.toml
+        language: system
+        types: [python]
+        require_serial: true
+        verbose: true
+      - id: pip-compile-multi-verify
+        name: Verify Lockfiles
+        entry: pip-compile-multi
+        args:
+          - verify
+          - --directory=requirements
         language: system
         types: [python]
         require_serial: true
