@@ -17,11 +17,18 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.9
-      - name: Install project dependencies
+      - name: Install build tools
         run: |
           pip install -U pip setuptools wheel
           pip install pip-tools
+      - name: Verify Lockfiles
+        run: |
+          pip-compile-multi verify --directory=requirements
+      - name: Install project dependencies
           pip-sync requirements/main.txt requirements/dev.txt
+      - name: Security check with bandit
+        run: |
+          bandit -r .
       - name: Check import sorting
         run: |
           isort --settings-path=pyproject.toml --check-only .
