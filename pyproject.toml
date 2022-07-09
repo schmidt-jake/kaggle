@@ -3,6 +3,7 @@ name = "kaggle"
 description = "Kaggle competition monorepo"
 readme = "README.md"
 python = "^3.9"
+
 [tool.flake8]
 max-line-length = 120
 
