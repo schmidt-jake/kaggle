@@ -80,7 +80,7 @@ class Metadata(pd.DataFrame):
         """
         row = self.iloc[index]
         image_id = row["image_id"]
-        dest_dir = os.path.join(self.data_dir, self.name, row["patient_id"])
+        dest_dir = os.path.join(self.data_dir, self.name)
         return dest_dir, f"{image_id}.tif"
 
     def download_img(self, index: int) -> str:
