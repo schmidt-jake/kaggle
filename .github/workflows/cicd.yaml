@@ -1,4 +1,4 @@
-name: Checks and tests
+name: Basic Checks
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    name: Check stuff
+    name: Checks (Python 3.9)
     steps:
       - name: Clone
         uses: actions/checkout@v3
