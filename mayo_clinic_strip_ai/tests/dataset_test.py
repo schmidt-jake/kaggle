@@ -20,12 +20,6 @@ def tif_img_path(tmpdir):
     return img_path
 
 
-def test_load_tif(tif_img_path):
-    img = dataset.load_tif(tif_img_path)
-    assert img.ndim == 3
-    assert img.dtype == torch.uint8
-
-
 def test_augmenter():
     aug = dataset.Augmenter()
     x = torch.testing.make_tensor(
@@ -38,8 +32,3 @@ def test_augmenter():
     y: torch.Tensor = aug(x)
     assert y.dtype == torch.uint8
     assert y.shape == (3, 512, 512)
-
-
-# def test_tif_dataset(tif_img_path):
-#     metadata = pd.DataFrame
-#     ds = dataset.TifDataset()
