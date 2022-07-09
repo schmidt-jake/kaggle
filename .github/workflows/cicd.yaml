@@ -20,7 +20,7 @@ jobs:
       - name: Install build tools
         run: |
           pip install -U pip setuptools wheel
-          pip install pip-tools
+          pip install pip-tools pip-compile-multi
       - name: Verify Lockfiles
         run: pip-compile-multi verify --directory=requirements
       - name: Install project dependencies
