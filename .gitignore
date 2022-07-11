@@ -130,3 +130,5 @@ dmypy.json
 
 
 **/data/**/*.tif
+**/data/zarrs
+**/*log.txt
