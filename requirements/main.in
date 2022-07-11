@@ -2,3 +2,4 @@ kaggle
 pandas
 torch
 torchvision
+zarr
