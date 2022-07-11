@@ -1,17 +1,15 @@
+import logging
 import os
 from subprocess import check_call
 from tempfile import TemporaryDirectory
-from typing import Tuple, Type, TYPE_CHECKING
+from typing import Tuple, Type
 
+import cv2
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-from PIL import Image
-import torch
 
-if TYPE_CHECKING:
-    import numpy.typing as npt
-
-Image.MAX_IMAGE_PIXELS = None
+logger = logging.getLogger(__name__)
 
 
 class Metadata(pd.DataFrame):
@@ -48,7 +46,7 @@ class Metadata(pd.DataFrame):
             The local directory to download data to.
         """
         df = pd.read_csv(
-            filepath,
+            os.path.join(data_dir, filepath),
             dtype={
                 "image_id": "string",
                 "center_id": "category",
@@ -98,14 +96,16 @@ class Metadata(pd.DataFrame):
             The local filepath to which the image was downloaded.
         """
         dest_dir, filename = self.local_img_path(index)
+        remote_path = os.path.join(self.name, filename)
         dest_path = os.path.join(dest_dir, filename)
+        logger.debug(f"Downloading index {index} to {dest_path}...")
         with TemporaryDirectory() as tmpdir:
             check_call(
                 [
                     "kaggle",
                     "competitions",
                     "download",
-                    f"--file={dest_path}",
+                    f"--file={remote_path}",
                     f"--path={tmpdir}",
                     Metadata.COMPETITION_NAME,
                 ]
@@ -113,9 +113,9 @@ class Metadata(pd.DataFrame):
             check_call(["unzip", os.path.join(tmpdir, f"{filename}.zip"), "-d", dest_dir])
         return dest_path
 
-    def load_img(self, index: int) -> torch.Tensor:
+    def load_img(self, index: int) -> npt.NDArray[np.uint8]:
         """
-        Load an image as a `torch.Tensor` for a given metadata row.
+        Load an image as a numpy array for a given metadata row.
 
         Parameters
         ----------
@@ -124,9 +124,10 @@ class Metadata(pd.DataFrame):
 
         Returns
         -------
-        torch.Tensor
+        npt.NDArray[np.uint8]
             The loaded image.
         """
-        img = Image.open(os.path.join(*self.local_img_path(index)), mode="r", formats=["TIFF"])
-        arr: npt.NDArray[np.uint8] = np.array(img)
-        return torch.from_numpy(arr)
+        filepath = os.path.join(*self.local_img_path(index))
+        img: npt.NDArray[np.uint8] = cv2.imread(filepath, cv2.IMREAD_COLOR)
+        logger.debug(f"Loaded image from {filepath}. Shape: {img.shape} Dtype: {img.dtype}")
+        return img
