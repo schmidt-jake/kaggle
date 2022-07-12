@@ -1,25 +1,16 @@
 import logging
 import os
 from subprocess import CalledProcessError
-from typing import Any, List, Tuple
+from typing import List, Tuple
 
 os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(2**40)
 import cv2
-from numcodecs import Blosc
 import numpy as np
 import numpy.typing as npt
-from pandas import Series
-import zarr
 
 from mayo_clinic_strip_ai.data.metadata import Metadata
 
 logger = logging.getLogger(__name__)
-
-compressor = Blosc(
-    cname="zstd",
-    clevel=9,
-    shuffle=Blosc.AUTOSHUFFLE,
-)
 
 
 def get_contours(img: npt.NDArray[np.uint8]) -> Tuple[npt.NDArray[np.int32], ...]:
@@ -30,95 +21,65 @@ def get_contours(img: npt.NDArray[np.uint8]) -> Tuple[npt.NDArray[np.int32], ...
     return contours
 
 
-def get_background_rows(img: npt.NDArray[np.uint8]) -> Tuple[npt.NDArray, float]:
-    # img is HWC
+def get_mask(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    blur = cv2.blur(gray, ksize=(501, 501))
+    thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
+    logger.debug(f"Otsu threshold: {thresh}")
+    return mask
 
-    gray: npt.NDArray[np.uint8] = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    thresh: float = cv2.threshold(gray, thresh=0, maxval=255, type=cv2.THRESH_BINARY | cv2.THRESH_OTSU)[0]
-    is_background = (gray >= thresh).all(axis=1)
-    return is_background, thresh
+
+def bounding_box_crop(img: npt.NDArray[np.uint8], mask: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    x, y, w, h = cv2.boundingRect(mask)
+    cropped = img[y : y + h, x : x + w, ...]
+    return cropped
 
 
-def get_splits(
-    img: npt.NDArray[np.uint8],
-    background_rows: npt.NDArray,
-    min_gap: int = 101,
-) -> List[npt.NDArray[np.uint8]]:
-    # use a sliding window to smooth results
-    background_rows = np.lib.stride_tricks.sliding_window_view(
-        background_rows,
+def get_crops(img: npt.NDArray[np.uint8], mask: npt.NDArray[np.uint8], min_gap: int = 101):
+    if min_gap % 2 == 0:
+        min_gap += 1
+    is_foreground_row = (mask > 0).any(axis=1)
+    is_foreground_row = np.lib.stride_tricks.sliding_window_view(
+        is_foreground_row,
         window_shape=min_gap,
         writeable=False,
-    ).all(axis=1)
-    background_rows = np.pad(background_rows, pad_width=min_gap // 2, mode="edge")
-    dx = np.diff(background_rows, n=1)
+    ).any(axis=1)
+    is_foreground_row = np.pad(is_foreground_row, pad_width=min_gap // 2, mode="edge")
+    dx = np.diff(is_foreground_row)
     i = np.flatnonzero(dx)
-    splits = np.split(img, i + 1, axis=0)
-    return splits
+    img_splits = np.vsplit(img, i + 1)
+    mask_splits = np.vsplit(mask, i + 1)
+    out = []
+    for img_split, mask_split in zip(img_splits, mask_splits):
+        if (mask_split > 0).any():  # this split contains foreground
+            x, y, w, h = cv2.boundingRect(mask_split)
+            if w > 1000 and h > 1000:  # min size filter
+                crop = img_split[y : y + h, x : x + w, :]
+                mask_crop = mask_split[y : y + h, x : x + w, np.newaxis]
 
-
-def remove_background(img: npt.NDArray[np.uint8], min_gap: int = 101) -> List[npt.NDArray[np.uint8]]:
-    # img is HW
-    background_rows, thresh = get_background_rows(img=img)
-    logger.debug(f"Initial threshold: {thresh}")
-    splits = get_splits(img=img, background_rows=background_rows, min_gap=min_gap)
-    logger.debug(f"Got {len(splits)} raw splits")
-    splits = [split for split in splits if (split <= thresh).any()]
-    logger.debug(f"Got {len(splits)} final splits")
-    return splits
+                # mask out the background
+                crop = np.where(mask_crop > 0, crop, 0)
+                out.append(crop)
+    return out
 
 
 def get_img(meta: Metadata, index: int) -> npt.NDArray[np.uint8]:
     if not os.path.exists(os.path.join(*meta.local_img_path(index))):
         meta.download_img(index)
-    img = meta.load_img(index)
+    img = meta.load_tif(index)
     return img
 
 
-def finalize_img(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-    gray: npt.NDArray[np.uint8] = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    thresh, binary = cv2.threshold(gray, thresh=0, maxval=255, type=cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-    logger.debug(f"Got final threshold {thresh}")
-    binary = cv2.bitwise_not(binary)
-    binary = cv2.morphologyEx(
-        binary,
-        op=cv2.MORPH_OPEN,
-        kernel=cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(13, 13)),
-        iterations=2,
+def write_tif(img: npt.NDArray[np.uint8], filename: str) -> None:
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    cv2.imwrite(
+        filename=filename,
+        img=img,
+        params=[cv2.IMWRITE_TIFF_COMPRESSION, 8],  # use adobe-deflate lossless compression
     )
-    x, y, w, h = cv2.boundingRect(binary)
-    crop = img[y : y + h, x : x + w, :]  # noqa: E203
-    return crop
 
 
-def write_zarr(img: npt.NDArray, path: str, grp: zarr.Group, **attrs: Any) -> None:
-    z: zarr.Array = grp.array(
-        name=path,
-        data=img,
-        shape=img.shape,
-        dtype=img.dtype,
-        chunks=(20_000, 20_000, 3),
-        read_only=True,
-        compressor=compressor,
-        overwrite=True,
-    )
-    z.attrs.update(**attrs)
-
-
-# def write_tif():
-#     out_dir = os.path.join(
-#         "mayo_clinic_strip_ai/data/out",
-#         meta.name,
-#         row["image_id"],
-#     )
-#     os.makedirs(out_dir, exist_ok=True)
-#     cv2.imwrite(
-#         os.path.join(out_dir, f"{j}.tif"),
-#         crop,
-#     )
-
-
-def process_img(img: npt.NDArray[np.uint8], row: Series, grp: zarr.Group) -> None:
+def process_img(img: npt.NDArray[np.uint8]) -> List[npt.NDArray[np.uint8]]:
     if img.ndim != 3:
         raise ValueError(f"Got wrong number of dimensions: {img.ndim}")
 
@@ -129,22 +90,16 @@ def process_img(img: npt.NDArray[np.uint8], row: Series, grp: zarr.Group) -> Non
         logger.debug("Transposing image")
         img = img.transpose(1, 0, 2)
 
-    splits = remove_background(img=img, min_gap=1001)
-    if len(splits) == 0:
-        raise ValueError("Found no splits!")
-    elif len(splits) > 3:
-        raise ValueError(f"Found too many ({len(splits)}) splits!")
-    for j, split in enumerate(splits):
-        crop = finalize_img(split)
-        write_zarr(
-            img=crop,
-            path=os.path.join(row["image_id"], f"{j}.zarr"),
-            grp=grp,
-            split=j,
-            **row.to_dict(),
-        )
-        logger.debug("split saved.")
-    logger.debug("Done with image!")
+    img = cv2.bitwise_not(img)  # invert colors so that background is 0 (black)
+    mask = get_mask(img)
+    img = bounding_box_crop(img, mask)
+    mask = bounding_box_crop(mask, mask)
+    crops = get_crops(img, mask, min_gap=int(0.1 * img.shape[0]))
+    if len(crops) == 0:
+        raise ValueError("Found no crops!")
+    elif len(crops) > 3:
+        raise ValueError(f"Found too many ({len(crops)}) splits!")
+    return crops
 
 
 if __name__ == "__main__":
@@ -159,13 +114,18 @@ if __name__ == "__main__":
         filepath="train.csv",
         data_dir="mayo_clinic_strip_ai/data/",
     )
-    root: zarr.Group = zarr.group("mayo_clinic_strip_ai/data/zarrs/")
-    with root:
-        with root.create_group(meta.name) as grp:
-            for i, row in meta.iterrows():
-                logger.debug(f"Starting on image {i}...")
-                try:
-                    img = get_img(meta, i)
-                    process_img(img, row=meta.iloc[i], grp=grp)
-                except (ValueError, CalledProcessError) as e:
-                    logger.error(f"Error with {os.path.join(*meta.local_img_path(i))}\n{e}")
+
+    for row_num, row in meta.iterrows():
+        logger.debug(f"Starting on image {row_num}...")
+        try:
+            img = get_img(meta, row_num)
+            crops = process_img(img)
+            for crop_num, crop in enumerate(crops):
+                write_tif(
+                    img=crop,
+                    filename=os.path.join("mayo_clinic_strip_ai/data/out", row["image_id"], f"{crop_num}.tif"),
+                )
+                logger.debug(f"Split {crop_num} saved.")
+            logger.debug("Done with image!")
+        except (ValueError, CalledProcessError) as e:
+            logger.error(f"Error with {os.path.join(*meta.local_img_path(row_num))}\n{e}")

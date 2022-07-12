@@ -113,7 +113,7 @@ class Metadata(pd.DataFrame):
             check_call(["unzip", os.path.join(tmpdir, f"{filename}.zip"), "-d", dest_dir])
         return dest_path
 
-    def load_img(self, index: int) -> npt.NDArray[np.uint8]:
+    def load_tif(self, index: int) -> npt.NDArray[np.uint8]:
         """
         Load an image as a numpy array for a given metadata row.
 
@@ -129,5 +129,6 @@ class Metadata(pd.DataFrame):
         """
         filepath = os.path.join(*self.local_img_path(index))
         img: npt.NDArray[np.uint8] = cv2.imread(filepath, cv2.IMREAD_COLOR)
+        img = np.flip(img, axis=2)
         logger.debug(f"Loaded image from {filepath}. Shape: {img.shape} Dtype: {img.dtype}")
         return img

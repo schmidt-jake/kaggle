@@ -18,10 +18,11 @@ class Normalizer(torch.jit.ScriptModule):
         torch.Tensor
             The normalized image batch, NCHW.
         """
-        img = img.clone()
-        _min = img.amin(dim=(1, 2), keepdim=True)
-        _max = img.amax(dim=(1, 2), keepdim=True)
-        img = (img - _min) / (_max - _min)
+        # img = img.clone()
+        # _min = img.amin(dim=(1, 2), keepdim=True)
+        # _max = img.amax(dim=(1, 2), keepdim=True)
+        # img = (img - _min) / (_max - _min)
+        img = img / 255
         img = img.permute(0, 3, 1, 2)
         return img
 
