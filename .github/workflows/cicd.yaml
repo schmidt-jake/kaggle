@@ -1,0 +1,39 @@
+name: Basic Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    name: Checks (Python 3.9)
+    steps:
+      - name: Clone
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Install build tools
+        run: |
+          pip install -U pip setuptools wheel
+          pip install pip-tools pip-compile-multi
+      - name: Verify Lockfiles
+        run: pip-compile-multi verify --directory=requirements
+      - name: Install project dependencies
+        run: pip-sync requirements/main.txt requirements/dev.txt
+      - name: Security check with bandit
+        run: bandit -r .
+      - name: Check import sorting
+        run: isort --settings-path=pyproject.toml --check-only .
+      - name: Run flake8
+        run: pflake8 --config=pyproject.toml .
+      - name: Format with black
+        run: black --config=pyproject.toml --check .
+      - name: Run mypy
+        run: mypy --config-file=pyproject.toml .
+      # - name: Run tests
+      #   run: python -m pytest -c pyproject.toml tests/
