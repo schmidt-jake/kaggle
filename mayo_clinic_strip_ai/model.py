@@ -23,7 +23,6 @@ class Normalizer(torch.jit.ScriptModule):
         # _max = img.amax(dim=(1, 2), keepdim=True)
         # img = (img - _min) / (_max - _min)
         img = img / 255
-        img = img.permute(0, 3, 1, 2)
         return img
 
 
@@ -67,7 +66,7 @@ class Model(torch.jit.ScriptModule):
         x = self.feature_extractor(x)
         x = self.activation(x)
         logit = self.classifier(x)
-        return logit
+        return logit.squeeze(dim=1)
 
 
 class Loss(torch.jit.ScriptModule):
@@ -77,4 +76,4 @@ class Loss(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self, logit: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
-        return self.bce_logit_loss(input=logit, target=label)
+        return self.bce_logit_loss(input=logit, target=label.to(dtype=logit.dtype))
