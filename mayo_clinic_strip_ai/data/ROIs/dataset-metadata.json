@@ -1,0 +1,54 @@
+{
+  "title": "Mayo ROIs",
+  "id": "jakeschmidt/mayo-ROIs",
+  "description": "Coordinates of regions of interest (ROIs) computed from the Mayo competition data.",
+  "licenses": [
+    {
+      "name": "CC0-1.0"
+    }
+  ],
+  "resources": [
+    {
+      "name": "train_rois",
+      "path": "train/ROIs.csv",
+      "schema": {
+        "fields": [
+          {
+            "name": "image_id",
+            "type": "string"
+          },
+          {
+            "name": "roi_num",
+            "description": "The index of the ROI within the image",
+            "type": "number"
+          },
+          {
+            "name": "x",
+            "description": "The leftmost pixel coordinate of the ROI",
+            "type": "number"
+          },
+          {
+            "name": "y",
+            "description": "The topmost pixel coordinate of the ROI",
+            "type": "number"
+          },
+          {
+            "name": "w",
+            "description": "The pixel width of the ROI",
+            "type": "number"
+          },
+          {
+            "name": "h",
+            "description": "The pixel height of the ROI",
+            "type": "number"
+          },
+          {
+            "name": "thresh",
+            "description": "The Otsu threshold computed for the image mask",
+            "type": "number"
+          }
+        ]
+      }
+    }
+  ]
+}

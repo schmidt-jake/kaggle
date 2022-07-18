@@ -128,4 +128,7 @@ dmypy.json
 # VSCode config
 .vscode
 
-**/data
+*.csv
+*.tif
+*log.txt
+!*dataset-metadata.json
