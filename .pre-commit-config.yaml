@@ -81,16 +81,6 @@ repos:
         types: [python]
         require_serial: true
         verbose: true
-      - id: pip-compile-multi-verify
-        name: Verify Lockfiles
-        entry: pip-compile-multi
-        args:
-          - verify
-          - --directory=requirements
-        language: system
-        types: [python]
-        require_serial: true
-        verbose: true
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.9.0
     hooks:
