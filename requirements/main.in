@@ -1,5 +1,7 @@
 kaggle
+opencv-python
+openslide-python
 pandas
 torch
+torchmetrics
 torchvision
-zarr
