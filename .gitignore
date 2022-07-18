@@ -128,7 +128,4 @@ dmypy.json
 # VSCode config
 .vscode
 
-
-**/data/**/*.tif
-**/data/zarrs
-**/*log.txt
+**/data
