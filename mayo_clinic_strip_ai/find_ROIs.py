@@ -42,7 +42,8 @@ def get_mask(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
     # NOTE: (empirically) order of operations is important:
     # 1. Invert colors (opencv expects background to be black)
     # 2. Convert to grayscale
-    # 3. Compute the foreground threshold
+    # 3. Blur
+    # 4. Compute the foreground threshold
     gray = cv2.cvtColor(cv2.bitwise_not(img), cv2.COLOR_RGB2GRAY)
     blur = cv2.blur(gray, ksize=(501, 501))
     thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
