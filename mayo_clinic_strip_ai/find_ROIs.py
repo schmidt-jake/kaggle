@@ -39,11 +39,19 @@ class Rect(object):
 
 
 def get_mask(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # NOTE: (empirically) order of operations is important:
+    # 1. Invert colors (opencv expects background to be black)
+    # 2. Convert to grayscale
+    # 3. Compute the foreground threshold
+    gray = cv2.cvtColor(cv2.bitwise_not(img), cv2.COLOR_RGB2GRAY)
     blur = cv2.blur(gray, ksize=(501, 501))
     thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
-    mask = cv2.bitwise_not(mask)
-    logger.debug(f"Otsu threshold: {thresh}")
+    if thresh == 0.0:
+        logger.warning("Otsu algo failed to find foreground threshold. Falling back to triangle algo...")
+    thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_TRIANGLE)
+    if thresh == 0.0:
+        raise ImageError("Both Otsu and Triangle algos failed to find foreground threshold!")
+    logger.debug(f"Foreground threshold: {thresh}")
     return thresh, mask
 
 
@@ -61,15 +69,14 @@ def find_ROIs(mask: npt.NDArray[np.uint8], min_gap_ratio: float = 0.1) -> List[R
         writeable=False,
     ).any(axis=1)
     is_foreground = np.pad(is_foreground, pad_width=min_gap // 2, mode="edge")
-    dx = np.diff(is_foreground)
-    split_offsets = np.flatnonzero(dx)
-    mask_splits = np.split(mask, split_offsets + 1, axis=1 - axis)
+    split_offsets = np.flatnonzero(np.diff(is_foreground)) + 1
+    mask_splits = np.split(mask, split_offsets, axis=1 - axis)
     ROIs = []
     for offset, mask_split in zip(np.insert(split_offsets, 0, 0), mask_splits):
         if (mask_split > 0).any():  # this split contains foreground
             rect = Rect.from_mask(mask_split)
             if rect.w < 1000 or rect.h < 1000:  # min size filter
-                logger.warning("Got too small region!")
+                logger.warning(f"ROI too small: w={rect.w} h={rect.h}")
             if axis == 1:
                 rect.y += offset
             elif axis == 0:
