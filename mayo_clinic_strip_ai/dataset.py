@@ -39,11 +39,12 @@ class TifDataset(Dataset):
             y = (h - self.crop_size) // 2
         img = img.read_region(location=(x, y), size=(self.crop_size, self.crop_size), level=0)
         img = np.array(img)
-        if img[3, :, :].min() != img[3, :, :].max():
+        if img[:, :, 3].min() != img[:, :, 3].max():
             raise ValueError("The alpha channel has signal?")
-        img = img[:3, :, :]  # drop alpha channel
+        img = img[:, :, :3]  # drop alpha channel
         img = cv2.bitwise_not(img)
         img = torch.from_numpy(img)
+        img = img.permute(2, 0, 1)
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)
