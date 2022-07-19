@@ -12,20 +12,22 @@ from torchvision.transforms import RandomVerticalFlip
 
 
 class TifDataset(Dataset):
-    def __init__(self, metadata: pd.DataFrame, training: bool, crop_size: int = 512) -> None:
+    def __init__(self, metadata: pd.DataFrame, training: bool, data_dir: str, crop_size: int = 512) -> None:
         super().__init__()
         self.metadata = metadata
         self.random_hflip = RandomHorizontalFlip()
         self.random_vflip = RandomVerticalFlip()
         self.training = training
         self.crop_size = crop_size
+        self.data_dir = data_dir
         # self.cache = OpenSlideCache()
 
     def __len__(self) -> int:
         return len(self.metadata)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
-        img = OpenSlide(os.path.join(*self.metadata.local_img_path(index)))
+        row = self.metadata.iloc[index]
+        img = OpenSlide(os.path.join(self.data_dir, row["image_id"] + ".tif"))
         if img.level_count > 1:
             raise ValueError(f"Got {img.level_count} levels!")
         w, h = img.dimensions
