@@ -1,24 +1,22 @@
 import os
 from typing import Tuple
 
+import cv2
 import numpy as np
 from openslide import OpenSlide
+import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from torchvision.transforms import PILToTensor
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
-from mayo_clinic_strip_ai.metadata import Metadata
-
 
 class TifDataset(Dataset):
-    def __init__(self, metadata: Metadata, training: bool, crop_size: int = 512) -> None:
+    def __init__(self, metadata: pd.DataFrame, training: bool, crop_size: int = 512) -> None:
         super().__init__()
         self.metadata = metadata
         self.random_hflip = RandomHorizontalFlip()
         self.random_vflip = RandomVerticalFlip()
-        self.pil_to_tensor = PILToTensor()
         self.training = training
         self.crop_size = crop_size
         # self.cache = OpenSlideCache()
@@ -38,13 +36,14 @@ class TifDataset(Dataset):
             x = (w - self.crop_size) // 2
             y = (h - self.crop_size) // 2
         img = img.read_region(location=(x, y), size=(self.crop_size, self.crop_size), level=0)
-        img = self.pil_to_tensor(img)
-        if img[3, :, :].min() != 255 or img[3, :, :].max() != 255:
+        img = np.array(img)
+        if img[3, :, :].min() != img[3, :, :].max():
             raise ValueError("The alpha channel has signal?")
-        img = img[:-1, :, :]  # drop alpha channel
+        img = img[:3, :, :]  # drop alpha channel
+        img = cv2.bitwise_not(img)
+        img = torch.from_numpy(img)
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)
         label_id = self.metadata["label"].cat.codes.iloc[index]
-
         return img, label_id
