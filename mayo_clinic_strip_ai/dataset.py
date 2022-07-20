@@ -10,6 +10,11 @@ from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
+POS_CLS = "LAA"
+NEG_CLS = "CE"
+
+LABEL_MAP = {POS_CLS: 1, NEG_CLS: 0}
+
 
 class TifDataset(Dataset):
     def __init__(self, metadata: pd.DataFrame, training: bool, data_dir: str, crop_size: int = 512) -> None:
@@ -48,5 +53,5 @@ class TifDataset(Dataset):
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)
-        label_id = self.metadata["label"].cat.codes.iloc[index]
+        label_id = LABEL_MAP[row["label"]]
         return img, label_id

@@ -1,3 +1,4 @@
+from math import log
 from multiprocessing import cpu_count
 
 import pandas as pd
@@ -9,6 +10,8 @@ from torchmetrics.classification import Accuracy
 from torchmetrics.classification import CalibrationError
 from torchvision.models import densenet161
 
+from mayo_clinic_strip_ai.dataset import NEG_CLS
+from mayo_clinic_strip_ai.dataset import POS_CLS
 from mayo_clinic_strip_ai.dataset import TifDataset
 from mayo_clinic_strip_ai.metadata import load_metadata
 from mayo_clinic_strip_ai.model import Classifier
@@ -18,11 +21,21 @@ from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
 
 
+def get_pos_weight(meta: pd.DataFrame) -> float:
+    cls_weights = len(meta) / (meta["label"].nunique() * meta["label"].value_counts())
+    return cls_weights[POS_CLS] / cls_weights[NEG_CLS]
+
+
+def get_bias(meta: pd.DataFrame) -> float:
+    p = meta["label"].eq(POS_CLS).mean()
+    return log(p / (1 - p))
+
+
 def train() -> None:
     torch.backends.cudnn.benchmark = True
 
     train_meta = pd.merge(
-        left=pd.read_csv("/kaggle/input/mayo-rois/train/ROIs.csv"),
+        left=pd.read_csv("/kaggle/input/mayo-rois/train/ROIs.csv", dtype={"image_id": "string", "roi_num": "uint8"}),
         right=load_metadata("/kaggle/input/mayo-clinic-strip-ai/train.csv"),
         how="left",
         validate="m:1",
@@ -32,11 +45,17 @@ def train() -> None:
     model = Model(
         normalizer=Normalizer(),
         feature_extractor=FeatureExtractor(backbone=densenet161()),
-        classifier=Classifier(initial_logit_bias=0.0, in_features=2208),  # FIXME: auto-set in_features
+        classifier=Classifier(initial_logit_bias=get_bias(train_meta), in_features=2208),  # FIXME: auto-set in_features
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.1)
-    loss_fn = Loss(pos_weight=0.5)  # FIXME: compute pos_weight from data
-    metrics = MetricCollection(Accuracy(), CalibrationError())
+    loss_fn = Loss(pos_weight=get_pos_weight(train_meta))
+    metrics = MetricCollection(
+        {
+            "raw_accuracy": Accuracy(),
+            "calibration_error": CalibrationError(),
+            "weighted_accuracy": Accuracy(threshold=train_meta["label"].eq(POS_CLS).mean()),
+        }
+    )
 
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")

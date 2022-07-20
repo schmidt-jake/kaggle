@@ -10,7 +10,7 @@ def load_metadata(filepath: str) -> pd.DataFrame:
         dtype={
             "image_id": "string",
             "center_id": "category",
-            "patient_id": "string",
+            "patient_id": "category",
             "image_num": "uint8",
         },
     )

@@ -31,10 +31,13 @@ class FeatureExtractor(torch.jit.ScriptModule):
         super().__init__()
         self.feature_layer = feature_layer
         self.backbone = create_feature_extractor(backbone, return_nodes=[self.feature_layer])
+        self.bn = torch.nn.BatchNorm1d(num_features=2208)  # FIXME: make dynamic
 
     @torch.jit.script_method
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        return self.backbone(img)[self.feature_layer]
+        features = self.backbone(img)[self.feature_layer]
+        features = self.bn(features)
+        return features
 
 
 class Classifier(torch.jit.ScriptModule):
@@ -57,7 +60,6 @@ class Model(torch.jit.ScriptModule):
         self.normalizer = normalizer
         self.feature_extractor = feature_extractor
         self.classifier = classifier
-        # self.bn = torch.nn.BatchNorm1d(num_features=self.feature_extractor)
         self.activation = torch.nn.ReLU(inplace=True)
 
     @torch.jit.script_method
@@ -65,8 +67,9 @@ class Model(torch.jit.ScriptModule):
         x: torch.Tensor = self.normalizer(img)
         x = self.feature_extractor(x)
         x = self.activation(x)
-        logit = self.classifier(x)
-        return logit.squeeze(dim=1)
+        logit: torch.Tensor = self.classifier(x)
+        logit = logit.squeeze(dim=1)
+        return logit
 
 
 class Loss(torch.jit.ScriptModule):
