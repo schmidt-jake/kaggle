@@ -3,12 +3,15 @@ from typing import Tuple
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from openslide import OpenSlide
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
+
+from mayo_clinic_strip_ai.find_ROIs import Rect
 
 POS_CLS = "LAA"
 NEG_CLS = "CE"
@@ -30,24 +33,58 @@ class TifDataset(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
+    @staticmethod
+    def _read_region(img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
+        x = img.read_region(
+            location=(crop.x, crop.y),
+            size=(crop.w, crop.h),
+            level=0,
+        )
+        x = np.array(x)
+        x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
+        x = cv2.bitwise_not(x)
+        return x
+
+    def _random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
+        x_offset = np.random.randint(low=0, high=roi.w - self.crop_size)
+        y_offset = np.random.randint(low=0, high=roi.h - self.crop_size)
+        return self._read_region(
+            img=img,
+            crop=Rect(
+                x=roi.x + x_offset,
+                y=roi.y + y_offset,
+                w=self.crop_size,
+                h=self.crop_size,
+            ),
+        )
+
+    def valid_random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
+        x = self._random_crop(img=img, roi=roi)
+        while x.mean() < 20.0:
+            x = self._random_crop(img=img, roi=roi)
+        return x
+
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
         row = self.metadata.iloc[index]
         img = OpenSlide(os.path.join(self.data_dir, row["image_id"] + ".tif"))
         if img.level_count > 1:
             raise ValueError(f"Got {img.level_count} levels!")
-        w, h = img.dimensions
+        roi = Rect(x=row["x"], y=row["y"], w=row["w"], h=row["h"])
+        # FIXME: what if ROI is smaller than crop size?
         if self.training:
-            x = np.random.randint(low=0, high=w - self.crop_size)
-            y = np.random.randint(low=0, high=h - self.crop_size)
+            img = self.valid_random_crop(img=img, roi=roi)
         else:
-            x = (w - self.crop_size) // 2
-            y = (h - self.crop_size) // 2
-        img = img.read_region(location=(x, y), size=(self.crop_size, self.crop_size), level=0)
-        img = np.array(img)
-        if img[:, :, 3].min() != img[:, :, 3].max():
-            raise ValueError("The alpha channel has signal?")
-        img = img[:, :, :3]  # drop alpha channel
-        img = cv2.bitwise_not(img)
+            x_offset = (roi.w - self.crop_size) // 2
+            y_offset = (roi.h - self.crop_size) // 2
+            img = self._read_region(
+                img=img,
+                crop=Rect(
+                    x=roi.x + x_offset,
+                    y=roi.y + y_offset,
+                    w=self.crop_size,
+                    h=self.crop_size,
+                ),
+            )
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
         if self.training:
