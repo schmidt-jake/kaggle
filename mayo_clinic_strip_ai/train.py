@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
+from torchmetrics import AUROC
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 from torchmetrics.classification import CalibrationError
@@ -54,6 +55,7 @@ def train() -> None:
             "raw_accuracy": Accuracy(),
             "calibration_error": CalibrationError(),
             "weighted_accuracy": Accuracy(threshold=train_meta["label"].eq(POS_CLS).mean()),
+            "auroc": AUROC(),
         }
     )
 
@@ -101,6 +103,7 @@ def train() -> None:
                 grad_scaler.update()
                 metrics.update(preds=logit.sigmoid(), target=label_id)
                 m = {k: v.item() for k, v in metrics.compute().items()}
+                m["loss"] = loss.item()
                 metrics.reset()
             print(m)
 
