@@ -42,6 +42,7 @@ def train() -> None:
         validate="m:1",
         on="image_id",
     )
+    train_meta.query("h >= 512 and w >= 512", inplace=True)
 
     model = Model(
         normalizer=Normalizer(),
