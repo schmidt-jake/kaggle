@@ -63,7 +63,8 @@ class TifDataset(Dataset):
         i = 0
         while x.mean() < 20.0:
             if i > 200:
-                raise ValueError("Couldn't find a good crop!")
+                print("Couldn't find a good crop!")
+                break
             x = self._random_crop(img=img, roi=roi)
             i += 1
         return x
@@ -76,11 +77,7 @@ class TifDataset(Dataset):
         roi = Rect(x=row["x"], y=row["y"], w=row["w"], h=row["h"])
         # FIXME: what if ROI is smaller than crop size?
         if self.training:
-            try:
-                img = self.valid_random_crop(img=img, roi=roi)
-            except ValueError:
-                print("Problem with image:", row["image_id"])
-                raise
+            img = self.valid_random_crop(img=img, roi=roi)
         else:
             x_offset = (roi.w - self.crop_size) // 2
             y_offset = (roi.h - self.crop_size) // 2
