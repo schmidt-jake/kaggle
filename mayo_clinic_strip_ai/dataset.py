@@ -46,8 +46,8 @@ class TifDataset(Dataset):
         return x
 
     def _random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
-        x_offset = np.random.randint(low=0, high=min(1, roi.w - self.crop_size))
-        y_offset = np.random.randint(low=0, high=min(1, roi.h - self.crop_size))
+        x_offset = np.random.randint(low=0, high=max(1, roi.w - self.crop_size))
+        y_offset = np.random.randint(low=0, high=max(1, roi.h - self.crop_size))
         return self._read_region(
             img=img,
             crop=Rect(
