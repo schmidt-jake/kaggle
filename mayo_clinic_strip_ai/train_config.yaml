@@ -1,0 +1,14 @@
+tif_dir: /kaggle/input/mayo-clinic-strip-ai/train/
+metadata_path: /kaggle/input/mayo-clinic-strip-ai/train.csv
+roi_path: /kaggle/input/mayo-rois/train/ROIs.csv
+hyperparameters:
+  data:
+    batch_size: 16
+    crop_size: 512
+    epochs: 10
+  model:
+    backbone: densenet161
+  optimizer:
+    cls: AdamW
+    lr: 0.002
+    weight_decay: 0.1

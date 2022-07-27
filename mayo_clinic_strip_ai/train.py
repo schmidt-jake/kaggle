@@ -1,6 +1,8 @@
 from math import log
 from multiprocessing import cpu_count
 
+import hydra
+from omegaconf import DictConfig
 import pandas as pd
 import torch
 import torch.backends.cudnn
@@ -9,7 +11,7 @@ from torchmetrics import AUROC
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 from torchmetrics.classification import CalibrationError
-from torchvision.models import densenet161
+from torchvision import models
 
 from mayo_clinic_strip_ai.dataset import NEG_CLS
 from mayo_clinic_strip_ai.dataset import POS_CLS
@@ -32,24 +34,32 @@ def get_bias(meta: pd.DataFrame) -> float:
     return log(p / (1 - p))
 
 
-def train() -> None:
+@hydra.main(config_path=".", config_name="train_config", version_base=None)
+def train(cfg: DictConfig) -> None:
     torch.backends.cudnn.benchmark = True
 
     train_meta = pd.merge(
-        left=pd.read_csv("/kaggle/input/mayo-rois/train/ROIs.csv", dtype={"image_id": "string", "roi_num": "uint8"}),
-        right=load_metadata("/kaggle/input/mayo-clinic-strip-ai/train.csv"),
+        left=pd.read_csv(cfg.roi_path, dtype={"image_id": "string", "roi_num": "uint8"}),
+        right=load_metadata(cfg.metadata_path),
         how="left",
         validate="m:1",
         on="image_id",
     )
-    train_meta.query("h >= 512 and w >= 512", inplace=True)
+    train_meta.query(
+        f"h >= {cfg.hyperparameters.data.crop_size} and w >= {cfg.hyperparameters.data.crop_size}",
+        inplace=True,
+    )
 
     model = Model(
         normalizer=Normalizer(),
-        feature_extractor=FeatureExtractor(backbone=densenet161()),
+        feature_extractor=FeatureExtractor(backbone=getattr(models, cfg.hyperparameters.model.backbone)()),
         classifier=Classifier(initial_logit_bias=get_bias(train_meta), in_features=2208),  # FIXME: auto-set in_features
     )
-    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.1)
+    optimizer: torch.optim.Optimizer = getattr(torch.optim, cfg.hyperparameters.optimizer.cls)(
+        model.parameters(),
+        lr=cfg.hyperparameters.optimizer.lr,
+        weight_decay=cfg.hyperparameters.optimizer.weight_decay,
+    )
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta))
     metrics = MetricCollection(
         {
@@ -62,7 +72,7 @@ def train() -> None:
 
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
-    print("Device", device)
+    print("device:", device)
     model.to(device=device, memory_format=torch.channels_last, non_blocking=True)
     loss_fn.to(device=device, non_blocking=True)
     metrics.to(device=device, non_blocking=True)
@@ -70,27 +80,26 @@ def train() -> None:
     train_dataset = TifDataset(
         metadata=train_meta,
         training=True,
-        data_dir="/kaggle/input/mayo-clinic-strip-ai/train/",
+        data_dir=cfg.tif_dir,
     )
-    batch_size = 16
     num_workers = cpu_count()
     prefetch_batches = 4
     train_dataloader = DataLoader(
         dataset=train_dataset,
-        batch_size=batch_size,
+        batch_size=cfg.hyperparameters.data.batch_size,
         shuffle=True,
         pin_memory=torch.cuda.is_available(),
-        pin_memory_device=str(device),
-        prefetch_factor=max(2, prefetch_batches * batch_size // num_workers),
+        pin_memory_device=str(device) if torch.cuda.is_available() else "",
+        prefetch_factor=max(2, prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
         num_workers=num_workers,
         drop_last=torch.backends.cudnn.benchmark,
     )
 
     grad_scaler = torch.cuda.amp.GradScaler()
 
-    print("num workers", num_workers)
-    print("prefetch factor", train_dataloader.prefetch_factor)
-    for epoch in range(10):
+    print("num workers:", num_workers)
+    print("prefetch factor:", train_dataloader.prefetch_factor)
+    for epoch in range(cfg.hyperparameters.data.epochs):
         print("Starting epoch", epoch)
         for img, label_id in train_dataloader:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)

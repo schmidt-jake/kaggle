@@ -73,10 +73,6 @@ pyproject-flake8==0.0.1a4
     # via -r requirements/dev.in
 pytest==7.1.2
     # via -r requirements/dev.in
-pyyaml==6.0
-    # via
-    #   bandit
-    #   pre-commit
 smmap==5.0.0
     # via gitdb
 stevedore==4.0.0

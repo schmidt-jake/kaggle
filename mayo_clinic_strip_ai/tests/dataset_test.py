@@ -1,12 +1,12 @@
 import numpy as np
 from PIL import Image
-from pytest import fixture
+import pytest
 import torch
 
 from mayo_clinic_strip_ai import dataset
 
 
-@fixture
+@pytest.fixture
 def tif_img_path(tmpdir):
     img_path = str(tmpdir / "img.tif")
     arr = np.random.randint(
@@ -20,8 +20,9 @@ def tif_img_path(tmpdir):
     return img_path
 
 
-def test_augmenter():
-    aug = dataset.Augmenter()
+@pytest.mark.parametrize("training", [True, False])
+def test_tifdataset(tif_img_path: str, training: bool):
+    aug = dataset.TifDataset(training=training)
     x = torch.testing.make_tensor(
         (3, 1024, 1024),
         low=0,

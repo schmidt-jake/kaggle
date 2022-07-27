@@ -132,3 +132,4 @@ dmypy.json
 *.tif
 *log.txt
 !*dataset-metadata.json
+outputs
