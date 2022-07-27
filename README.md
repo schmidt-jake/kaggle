@@ -55,7 +55,10 @@ If using VSCode, consider adding the following configuration to your workspace s
             ],
             "url": "https://specs.frictionlessdata.io/schemas/data-package.json"
         },
-    ]
+    ],
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
 }
 ```
 
@@ -66,3 +69,12 @@ You can enable pre-commit hooks with:
 ```bash
 pre-commit install --install-hooks
 ```
+
+## To-Do
+
+- further filter ROIs that are empty-ish. Some crops are coming up empty in the dataset and we can't find a valid random crop.
+- Add tensorboard to training loop
+- Create a validation set (or cross-validation)
+- Create an inference loop
+- Create an automated submission script
+- [EDA to-do](mayo_clinic_strip_ai/eda/README.md)
