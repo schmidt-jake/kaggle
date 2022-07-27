@@ -9,6 +9,6 @@ pip install pip-compile-multi
 pip-compile-multi \
     --autoresolve \
     --live \
-    --upgrade \
+    --no-upgrade \
     --use-cache \
     --directory=requirements
