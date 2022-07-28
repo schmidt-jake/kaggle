@@ -1,5 +1,6 @@
 from math import log
 from multiprocessing import cpu_count
+from typing import Type
 
 import hydra
 from omegaconf import DictConfig
@@ -13,10 +14,9 @@ from torchmetrics.classification import Accuracy
 from torchmetrics.classification import CalibrationError
 from torchvision import models
 
-from mayo_clinic_strip_ai.dataset import NEG_CLS
-from mayo_clinic_strip_ai.dataset import POS_CLS
-from mayo_clinic_strip_ai.dataset import TifDataset
-from mayo_clinic_strip_ai.metadata import load_metadata
+from mayo_clinic_strip_ai.data import NEG_CLS
+from mayo_clinic_strip_ai.data import POS_CLS
+from mayo_clinic_strip_ai.data import ROIDataset
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
@@ -24,43 +24,103 @@ from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
 
 
-def get_pos_weight(meta: pd.DataFrame) -> float:
-    cls_weights = len(meta) / (meta["label"].nunique() * meta["label"].value_counts())
+def get_pos_weight(y: pd.Series) -> float:
+    """
+    Computes the weight of the positive class, such that the negative class weight is 1.0
+    and the weights are balanced according to their frequency.
+
+    Parameters
+    ----------
+    y : pd.Series
+        The vector of binary labels for the training data
+
+    Returns
+    -------
+    float
+        The positive class weight
+    """
+    cls_weights = len(y) / (y.nunique() * y.value_counts())
     return cls_weights[POS_CLS] / cls_weights[NEG_CLS]
 
 
-def get_bias(meta: pd.DataFrame) -> float:
-    p = meta["label"].eq(POS_CLS).mean()
+def get_bias(y: pd.Series) -> float:
+    """
+    Gets the value of the input to the sigmoid function such that
+    it outputs the probability of the postive class.
+
+    Parameters
+    ----------
+    y : pd.Series
+        The vector of binary labels for the training data
+
+    Returns
+    -------
+    float
+        The bias value.
+    """
+    p = y.eq(POS_CLS).mean()
     return log(p / (1 - p))
 
 
 @hydra.main(config_path=".", config_name="train_config", version_base=None)
 def train(cfg: DictConfig) -> None:
+    """
+    The entrypoint into the training job.
+
+    Parameters
+    ----------
+    cfg : DictConfig
+        The config object containing e.g. hyperparameter settings.
+    """
+    # Let the pytorch backend seelct the fastest convolutional kernel
     torch.backends.cudnn.benchmark = True
 
+    # Load the training metadata, including image labels and ROI coordinates
     train_meta = pd.merge(
-        left=pd.read_csv(cfg.roi_path, dtype={"image_id": "string", "roi_num": "uint8"}),
-        right=load_metadata(cfg.metadata_path),
+        left=pd.read_csv(cfg.roi_path),
+        right=pd.read_csv(cfg.metadata_path),
         how="left",
         validate="m:1",
         on="image_id",
+    ).astype(
+        {
+            "image_id": "string",
+            "center_id": "category",
+            "patient_id": "category",
+            "image_num": "uint8",
+            "label": "category",
+            "roi_num": "uint8",
+        }
     )
+
+    # Filter out ROIs that are too small
     train_meta.query(
         f"h >= {cfg.hyperparameters.data.crop_size} and w >= {cfg.hyperparameters.data.crop_size}",
         inplace=True,
     )
 
+    # Create the model
     model = Model(
         normalizer=Normalizer(),
         feature_extractor=FeatureExtractor(backbone=getattr(models, cfg.hyperparameters.model.backbone)()),
-        classifier=Classifier(initial_logit_bias=get_bias(train_meta), in_features=2208),  # FIXME: auto-set in_features
+        classifier=Classifier(
+            initial_logit_bias=get_bias(train_meta["label"]),
+            in_features=2208,  # FIXME: auto-set this based on feature_extractor output
+        ),
     )
-    optimizer: torch.optim.Optimizer = getattr(torch.optim, cfg.hyperparameters.optimizer.cls)(
+
+    # Create the optimizer
+    optimizer_cls: Type[torch.optim.Optimizer] = getattr(torch.optim, cfg.hyperparameters.optimizer.cls)
+    optimizer: torch.optim.Optimizer = optimizer_cls(  # type: ignore[call-arg]
         model.parameters(),
         lr=cfg.hyperparameters.optimizer.lr,
         weight_decay=cfg.hyperparameters.optimizer.weight_decay,
     )
-    loss_fn = Loss(pos_weight=get_pos_weight(train_meta))
+
+    # Create the loss function
+    loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
+
+    # Create metrics
     metrics = MetricCollection(
         {
             "raw_accuracy": Accuracy(),
@@ -77,12 +137,13 @@ def train(cfg: DictConfig) -> None:
     loss_fn.to(device=device, non_blocking=True)
     metrics.to(device=device, non_blocking=True)
 
-    train_dataset = TifDataset(
+    # Create dataset and dataloader
+    train_dataset = ROIDataset(
         metadata=train_meta,
         training=True,
         data_dir=cfg.tif_dir,
     )
-    num_workers = cpu_count()
+    num_workers = cpu_count()  # use all CPUs
     prefetch_batches = 4
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -95,10 +156,14 @@ def train(cfg: DictConfig) -> None:
         drop_last=torch.backends.cudnn.benchmark,
     )
 
+    # Gradient scaler is used for automatic mixed precision training
+    # Docs: https://pytorch.org/docs/stable/notes/amp_examples.html
     grad_scaler = torch.cuda.amp.GradScaler()
 
     print("num workers:", num_workers)
     print("prefetch factor:", train_dataloader.prefetch_factor)
+
+    # begin the training loop
     for epoch in range(cfg.hyperparameters.data.epochs):
         print("Starting epoch", epoch)
         for img, label_id in train_dataloader:

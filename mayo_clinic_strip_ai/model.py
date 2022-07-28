@@ -1,3 +1,6 @@
+"""
+Defines the neural network architecture
+"""
 import torch
 from torchvision.models.feature_extraction import create_feature_extractor
 
@@ -28,6 +31,16 @@ class Normalizer(torch.jit.ScriptModule):
 
 class FeatureExtractor(torch.jit.ScriptModule):
     def __init__(self, backbone: torch.nn.Module, feature_layer: str = "flatten"):
+        """
+        Extracts a feature vector from a normalized RGB image, using a backbone architecture.
+
+        Parameters
+        ----------
+        backbone : torch.nn.Module
+            A model from `torchvision.models` to use as the core of the
+        feature_layer : str, optional
+            The layer of `backbone` that creates the feature vector, by default "flatten"
+        """
         super().__init__()
         self.feature_layer = feature_layer
         self.backbone = create_feature_extractor(backbone, return_nodes=[self.feature_layer])
@@ -42,6 +55,17 @@ class FeatureExtractor(torch.jit.ScriptModule):
 
 class Classifier(torch.jit.ScriptModule):
     def __init__(self, initial_logit_bias: float, in_features: int):
+        """
+        A linear binary classifier.
+
+        Parameters
+        ----------
+        initial_logit_bias : float
+            An initial bias value for the classifier. Typically used to bias the classifier output
+            at the start of training in the case of class imbalance.
+        in_features : int
+            The dimension of the input to the classifier.
+        """
         super().__init__()
         self.logit = torch.nn.Linear(in_features=in_features, out_features=1)
         self.logit.bias = torch.nn.Parameter(
@@ -56,6 +80,18 @@ class Classifier(torch.jit.ScriptModule):
 
 class Model(torch.jit.ScriptModule):
     def __init__(self, normalizer: Normalizer, feature_extractor: FeatureExtractor, classifier: Classifier):
+        """
+        A binary classifier over RGB images.
+
+        Parameters
+        ----------
+        normalizer : Normalizer
+            A module that preprocesses the images
+        feature_extractor : FeatureExtractor
+            A module that extracts feature vectors from normalized images
+        classifier : Classifier
+            A binary classifier.
+        """
         super().__init__()
         self.normalizer = normalizer
         self.feature_extractor = feature_extractor

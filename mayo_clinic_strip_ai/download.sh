@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Downloads the competition dataset and stores it at ./mayo_clinic_strip_ai/data
+# WARNING: this script requires >350GB of free disk space
+
 set -euo pipefail
 
 LOCAL_DIR=mayo_clinic_strip_ai/data
