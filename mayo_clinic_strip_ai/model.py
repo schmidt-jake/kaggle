@@ -1,8 +1,10 @@
 """
 Defines the neural network architecture
 """
+from typing import Optional
+
 import torch
-from torchvision.models.feature_extraction import create_feature_extractor
+from torchvision import models
 
 
 class Normalizer(torch.jit.ScriptModule):
@@ -30,26 +32,30 @@ class Normalizer(torch.jit.ScriptModule):
 
 
 class FeatureExtractor(torch.jit.ScriptModule):
-    def __init__(self, backbone: torch.nn.Module, feature_layer: str = "flatten"):
+    def __init__(self, backbone_fn: str, weights: Optional[str] = None):
         """
         Extracts a feature vector from a normalized RGB image, using a backbone architecture.
 
         Parameters
         ----------
-        backbone : torch.nn.Module
-            A model from `torchvision.models` to use as the core of the
-        feature_layer : str, optional
-            The layer of `backbone` that creates the feature vector, by default "flatten"
+        backbone_fn : str
+            A valid callable attribute on `torchvision.models`
+        weights : Optional[str]
+            A string to be passed to `torchvision.models.get_weights`, default None
+            Example: "ResNet50_Weights.IMAGENET1K_V1"
         """
         super().__init__()
-        self.feature_layer = feature_layer
-        self.backbone = create_feature_extractor(backbone, return_nodes=[self.feature_layer])
-        self.bn = torch.nn.BatchNorm1d(num_features=2208)  # FIXME: make dynamic
+        if weights is not None:
+            weights = models.get_weight(weights)
+        backbone: torch.nn.Module = getattr(models, backbone_fn)(weights=weights)
+        self.features: torch.nn.Sequential = backbone.features  # type: ignore[assignment]
+        self.features.append(torch.nn.ReLU(inplace=True))
+        self.features.append(torch.nn.AdaptiveAvgPool2d(output_size=(1, 1)))
+        self.features.append(torch.nn.Flatten(start_dim=1))
 
     @torch.jit.script_method
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        features = self.backbone(img)[self.feature_layer]
-        features = self.bn(features)
+        features = self.features(img)
         return features
 
 
