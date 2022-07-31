@@ -179,7 +179,7 @@ def train(cfg: DictConfig) -> None:
                 torch.nn.utils.clip_grad_norm_(
                     parameters=model.parameters(),
                     max_norm=cfg.hyperparameters.model.max_grad_norm,
-                    error_if_nonfinite=True,
+                    error_if_nonfinite=False,
                 )
                 grad_scaler.step(optimizer)
                 grad_scaler.update()
