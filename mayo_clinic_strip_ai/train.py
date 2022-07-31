@@ -12,7 +12,6 @@ from torchmetrics import AUROC
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 from torchmetrics.classification import CalibrationError
-from torchvision import models
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -102,7 +101,10 @@ def train(cfg: DictConfig) -> None:
     # Create the model
     model = Model(
         normalizer=Normalizer(),
-        feature_extractor=FeatureExtractor(backbone=getattr(models, cfg.hyperparameters.model.backbone)()),
+        feature_extractor=FeatureExtractor(
+            backbone_fn=cfg.hyperparameters.model.backbone_fn,
+            weights=cfg.hyperparameters.model.weights,
+        ),
         classifier=Classifier(
             initial_logit_bias=get_bias(train_meta["label"]),
             in_features=2208,  # FIXME: auto-set this based on feature_extractor output
@@ -170,12 +172,18 @@ def train(cfg: DictConfig) -> None:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):
-                optimizer.zero_grad(set_to_none=True)
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
                 grad_scaler.scale(loss).backward()
+                grad_scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(
+                    parameters=model.parameters(),
+                    max_norm=cfg.hyperparameters.model.max_grad_norm,
+                    error_if_nonfinite=True,
+                )
                 grad_scaler.step(optimizer)
                 grad_scaler.update()
+                optimizer.zero_grad(set_to_none=True)
                 metrics.update(preds=logit.sigmoid(), target=label_id)
                 m = {k: v.item() for k, v in metrics.compute().items()}
                 m["loss"] = loss.item()

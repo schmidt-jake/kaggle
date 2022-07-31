@@ -7,8 +7,10 @@ hyperparameters:
     crop_size: 512
     epochs: 10
   model:
-    backbone: densenet161
+    backbone_fn: densenet161
+    weights: DenseNet161_Weights.DEFAULT
+    max_grad_norm: 1.0
   optimizer:
     cls: AdamW
     lr: 0.002
-    weight_decay: 0.1
+    weight_decay: 0.05
