@@ -25,7 +25,7 @@ class EvalMetrics(torch.nn.Module):
     @torch.cuda.amp.autocast()
     def update(self, logit: torch.Tensor, target: torch.Tensor) -> None:
         preds = logit.detach().sigmoid()
-        self.metrics.update(preds=preds, target=target.detach())
+        self.metrics.update(preds=preds.squeeze(dim=1), target=target.detach())
         self.min_pred.update(value=preds)
         self.max_pred.update(value=preds)
 

@@ -186,6 +186,7 @@ def train(cfg: DictConfig) -> None:
             grad_scaler.update()
             optimizer.zero_grad(set_to_none=True)
             m = train_metrics.compute()
+            train_metrics.reset()
             m["loss"] = loss.item()
             print(m)
 

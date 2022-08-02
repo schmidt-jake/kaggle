@@ -110,7 +110,6 @@ class Model(torch.jit.ScriptModule):
         x = self.feature_extractor(x)
         x = self.activation(x)
         logit: torch.Tensor = self.classifier(x)
-        logit = logit.squeeze(dim=1)
         return logit
 
 
@@ -121,4 +120,6 @@ class Loss(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self, logit: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
-        return self.bce_logit_loss(input=logit, target=label.to(dtype=logit.dtype))
+        label = label.unsqueeze(dim=1)
+        label = label.to(dtype=logit.dtype)
+        return self.bce_logit_loss(input=logit, target=label)
