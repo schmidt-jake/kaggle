@@ -21,7 +21,8 @@ from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
-from mayo_clinic_strip_ai.stain import normalize_staining
+
+# from mayo_clinic_strip_ai.stain import normalize_staining
 
 POS_CLS = "LAA"
 NEG_CLS = "CE"
@@ -95,7 +96,7 @@ class ROIDataset(Dataset):
         )
         x = np.array(x)
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
-        x, H, E = normalize_staining(x)
+        # x, H, E = normalize_staining(x)
         x = cv2.bitwise_not(x)
         return x
 
