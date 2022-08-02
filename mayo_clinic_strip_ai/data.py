@@ -19,6 +19,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import WeightedRandomSampler
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
+from torchvision.transforms import Resize
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
 
@@ -31,7 +32,13 @@ LABEL_MAP = {POS_CLS: 1, NEG_CLS: 0}
 
 class ROIDataset(Dataset):
     def __init__(
-        self, metadata: pd.DataFrame, training: bool, tif_dir: str, outline_dir: str, crop_size: int = 512
+        self,
+        metadata: pd.DataFrame,
+        training: bool,
+        tif_dir: str,
+        outline_dir: str,
+        crop_size: int,
+        final_size: int,
     ) -> None:
         """
         A dataset that loads image crops efficiently using Region-of-Interest (ROI) bounding box coordinates.
@@ -56,13 +63,14 @@ class ROIDataset(Dataset):
             is a valid filepath.
         outline_dir : str
         crop_size : int, optional
-            The side length (in pixels) of square crops to produce, by default 512
+            The side length (in pixels) of square crops to produce
         """
         # TODO: implement openslide.OpenSlideCache for better performance?
         super().__init__()
         self.metadata = metadata
         self.random_hflip = RandomHorizontalFlip()
         self.random_vflip = RandomVerticalFlip()
+        self.resize = Resize(size=final_size)
         self.training = training
         self.crop_size = crop_size
         self.tif_dir = tif_dir
@@ -220,6 +228,7 @@ class ROIDataset(Dataset):
         #     )
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
+        img = self.resize(img)
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)

@@ -4,7 +4,8 @@ roi_path: /kaggle/input/mayo-rois/train/ROIs.csv
 hyperparameters:
   data:
     batch_size: 16
-    crop_size: 512
+    crop_size: 2048
+    final_size: 256
     epochs: 10
   model:
     backbone_fn: densenet161

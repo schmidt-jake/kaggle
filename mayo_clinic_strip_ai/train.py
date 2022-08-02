@@ -153,6 +153,7 @@ def train(cfg: DictConfig) -> None:
         tif_dir=cfg.tif_dir,
         outline_dir=os.path.dirname(cfg.roi_path),
         crop_size=cfg.hyperparameters.data.crop_size,
+        final_size=cfg.hyperparameters.data.final_size,
     )
     num_workers = cpu_count()  # use all CPUs
     prefetch_batches = 4
