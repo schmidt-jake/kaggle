@@ -191,8 +191,8 @@ def train(cfg: DictConfig) -> None:
                     max_pred.update(value=preds)
                     metrics.update(preds=preds, target=label_id.detach())
                     m = {k: v.item() for k, v in metrics.compute().items()}
-                    m["max_pred"] = max_pred.compute()
-                    m["min_pred"] = min_pred.compute()
+                    m["max_pred"] = max_pred.compute().item()
+                    m["min_pred"] = min_pred.compute().item()
                     max_pred.reset()
                     min_pred.reset()
                     metrics.reset()
