@@ -9,10 +9,8 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
-from torchmetrics import AUROC
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
-from torchmetrics.classification import CalibrationError
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -23,6 +21,9 @@ from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
 from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
+
+# from torchmetrics.classification import CalibrationError
+# from torchmetrics import AUROC
 
 
 def get_pos_weight(y: pd.Series) -> float:
@@ -128,9 +129,9 @@ def train(cfg: DictConfig) -> None:
     metrics = MetricCollection(
         {
             "raw_accuracy": Accuracy(),
-            "calibration_error": CalibrationError(),
+            # "calibration_error": CalibrationError(),
             "weighted_accuracy": Accuracy(threshold=train_meta["label"].eq(POS_CLS).mean()),
-            "auroc": AUROC(),
+            # "auroc": AUROC(),
         }
     )
 
@@ -160,6 +161,7 @@ def train(cfg: DictConfig) -> None:
         prefetch_factor=max(2, prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
         num_workers=num_workers,
         drop_last=torch.backends.cudnn.benchmark,
+        persistent_workers=True,
     )
 
     # Gradient scaler is used for automatic mixed precision training
@@ -172,26 +174,27 @@ def train(cfg: DictConfig) -> None:
     # begin the training loop
     for epoch in range(cfg.hyperparameters.data.epochs):
         print("Starting epoch", epoch)
+        model.train()
         for img, label_id in train_dataloader:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
-                grad_scaler.scale(loss).backward()
-                grad_scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(
-                    parameters=model.parameters(),
-                    max_norm=cfg.hyperparameters.model.max_grad_norm,
-                    error_if_nonfinite=False,
-                )
-                grad_scaler.step(optimizer)
-                grad_scaler.update()
-                optimizer.zero_grad(set_to_none=True)
                 metrics.update(preds=logit.sigmoid(), target=label_id)
                 m = {k: v.item() for k, v in metrics.compute().items()}
-                m["loss"] = loss.item()
                 metrics.reset()
+            grad_scaler.scale(loss).backward()
+            grad_scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                parameters=model.parameters(),
+                max_norm=cfg.hyperparameters.model.max_grad_norm,
+                error_if_nonfinite=False,
+            )
+            grad_scaler.step(optimizer)
+            grad_scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+            m["loss"] = loss.item()
             print(m)
 
 
