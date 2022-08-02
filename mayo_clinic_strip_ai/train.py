@@ -9,7 +9,9 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
+from torchmetrics import MaxMetric
 from torchmetrics import MetricCollection
+from torchmetrics import MinMetric
 from torchmetrics.classification import Accuracy
 
 from mayo_clinic_strip_ai.data import NEG_CLS
@@ -141,6 +143,8 @@ def train(cfg: DictConfig) -> None:
     model.to(device=device, memory_format=torch.channels_last, non_blocking=True)
     loss_fn.to(device=device, non_blocking=True)
     metrics.to(device=device, non_blocking=True)
+    min_pred = MinMetric().to(device=device, non_blocking=True)
+    max_pred = MaxMetric().to(device=device, non_blocking=True)
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(
@@ -182,8 +186,15 @@ def train(cfg: DictConfig) -> None:
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
                 with torch.inference_mode():
-                    metrics.update(preds=logit.sigmoid().detach(), target=label_id.detach())
+                    preds = logit.sigmoid().detach()
+                    min_pred.update(value=preds)
+                    max_pred.update(value=preds)
+                    metrics.update(preds=preds, target=label_id.detach())
                     m = {k: v.item() for k, v in metrics.compute().items()}
+                    m["max_pred"] = max_pred.compute()
+                    m["min_pred"] = min_pred.compute()
+                    max_pred.reset()
+                    min_pred.reset()
                     metrics.reset()
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
