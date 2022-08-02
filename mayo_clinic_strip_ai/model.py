@@ -7,8 +7,8 @@ import torch
 from torchvision import models
 
 
-class Normalizer(torch.jit.ScriptModule):
-    @torch.jit.script_method
+class Normalizer(torch.nn.Module):
+    # @torch.jit.script_method
     def forward(self, img: torch.Tensor) -> torch.Tensor:
         """
         Normalizes an input image.
@@ -31,7 +31,7 @@ class Normalizer(torch.jit.ScriptModule):
         return img
 
 
-class FeatureExtractor(torch.jit.ScriptModule):
+class FeatureExtractor(torch.nn.Module):
     def __init__(self, backbone_fn: str, weights: Optional[str] = None):
         """
         Extracts a feature vector from a normalized RGB image, using a backbone architecture.
@@ -53,13 +53,13 @@ class FeatureExtractor(torch.jit.ScriptModule):
         self.features.append(torch.nn.AdaptiveAvgPool2d(output_size=(1, 1)))
         self.features.append(torch.nn.Flatten(start_dim=1))
 
-    @torch.jit.script_method
+    # @torch.jit.script_method
     def forward(self, img: torch.Tensor) -> torch.Tensor:
         features = self.features(img)
         return features
 
 
-class Classifier(torch.jit.ScriptModule):
+class Classifier(torch.nn.Module):
     def __init__(self, initial_logit_bias: float, in_features: int):
         """
         A linear binary classifier.
@@ -79,12 +79,12 @@ class Classifier(torch.jit.ScriptModule):
             requires_grad=True,
         )
 
-    @torch.jit.script_method
+    # @torch.jit.script_method
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.logit(x)
 
 
-class Model(torch.jit.ScriptModule):
+class Model(torch.nn.Module):
     def __init__(self, normalizer: Normalizer, feature_extractor: FeatureExtractor, classifier: Classifier):
         """
         A binary classifier over RGB images.
@@ -104,7 +104,7 @@ class Model(torch.jit.ScriptModule):
         self.classifier = classifier
         self.activation = torch.nn.ReLU(inplace=True)
 
-    @torch.jit.script_method
+    # @torch.jit.script_method
     def forward(self, img: torch.Tensor) -> torch.Tensor:
         x: torch.Tensor = self.normalizer(img)
         x = self.feature_extractor(x)
@@ -113,12 +113,12 @@ class Model(torch.jit.ScriptModule):
         return logit
 
 
-class Loss(torch.jit.ScriptModule):
+class Loss(torch.nn.Module):
     def __init__(self, pos_weight: float):
         super().__init__()
         self.bce_logit_loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight))
 
-    @torch.jit.script_method
+    # @torch.jit.script_method
     def forward(self, logit: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
         label = label.unsqueeze(dim=1)
         label = label.to(dtype=logit.dtype)

@@ -130,9 +130,25 @@ def train(cfg: DictConfig) -> None:
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
     print("device:", device)
-    model.to(device=device, memory_format=torch.channels_last, non_blocking=True)
+    model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
+
+    with torch.autocast(device_type=device.type):
+        summary(
+            model=model,
+            input_size=(
+                cfg.hyperparameters.data.batch_size,
+                3,
+                cfg.hyperparameters.data.final_size,
+                cfg.hyperparameters.data.final_size,
+            ),
+            device=device,
+            dtypes=[torch.uint8],
+            mode="train",
+        )
+
+    model = torch.jit.script(model)
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(
@@ -168,17 +184,10 @@ def train(cfg: DictConfig) -> None:
     for epoch in range(cfg.hyperparameters.data.epochs):
         print("Starting epoch", epoch)
         model.train()
-        for batch_idx, (img, label_id) in enumerate(train_dataloader):
+        for img, label_id in train_dataloader:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):
-                if epoch == 0 and batch_idx == 1:
-                    summary(
-                        model=model,
-                        input_data=[img],
-                        device=device,
-                        mode="train",
-                    )
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
             train_metrics.update(logit=logit, target=label_id)
