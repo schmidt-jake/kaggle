@@ -165,14 +165,13 @@ def train(cfg: DictConfig) -> None:
         final_size=cfg.hyperparameters.data.final_size,
     )
     num_workers = cpu_count()  # use all CPUs
-    prefetch_batches = 4
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=cfg.hyperparameters.data.batch_size,
         sampler=StratifiedSampler(metadata=train_meta[["label", "patient_id", "center_id"]]),
         pin_memory=torch.cuda.is_available(),
         pin_memory_device=str(device) if torch.cuda.is_available() else "",
-        prefetch_factor=max(2, prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
+        prefetch_factor=max(2, cfg.prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
         num_workers=num_workers,
         drop_last=torch.backends.cudnn.benchmark,
         persistent_workers=True,

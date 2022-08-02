@@ -1,6 +1,7 @@
 tif_dir: /kaggle/input/mayo-clinic-strip-ai/train/
 metadata_path: /kaggle/input/mayo-clinic-strip-ai/train.csv
 roi_path: /kaggle/input/mayo-rois/train/ROIs.csv
+prefetch_batches: 8
 hyperparameters:
   data:
     batch_size: 16
