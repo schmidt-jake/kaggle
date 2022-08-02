@@ -6,7 +6,7 @@ Docs:
 https://pytorch.org/docs/stable/data.html
 """
 import os
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 import cv2
 import numpy as np
@@ -16,12 +16,12 @@ import pandas as pd
 from scipy.stats import mode
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data import WeightedRandomSampler
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
-
-# from mayo_clinic_strip_ai.stain import normalize_staining
+from mayo_clinic_strip_ai.stain import normalize_staining
 
 POS_CLS = "LAA"
 NEG_CLS = "CE"
@@ -95,7 +95,7 @@ class ROIDataset(Dataset):
         )
         x = np.array(x)
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
-        # x, H, E = normalize_staining(x)
+        x, H, E = normalize_staining(x)
         x = cv2.bitwise_not(x)
         return x
 
@@ -227,3 +227,17 @@ class ROIDataset(Dataset):
             return img, label_id
         else:
             return img
+
+
+class StratifiedSampler(WeightedRandomSampler):
+    @staticmethod
+    def get_class_weights(y: pd.Series) -> Dict[str, float]:
+        cls_weights = len(y) / (y.nunique() * y.value_counts())
+        return cls_weights.to_dict()
+
+    def __init__(self, metadata: pd.DataFrame) -> None:
+        sample_weights = pd.Series(1.0, index=metadata.index, dtype=np.float32, name="sample_weight")
+        for name, col in metadata.iteritems():
+            _col_cls_weight = self.get_class_weights(col)
+            sample_weights *= col.map(_col_cls_weight.get).astype(np.float32)
+        super().__init__(weights=sample_weights, num_samples=len(metadata), replacement=False)
