@@ -135,20 +135,25 @@ def train(cfg: DictConfig) -> None:
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
     with torch.autocast(device_type=device.type):
-        summary(
-            model=model,
-            input_size=(
+        x = torch.randint(
+            low=0,
+            high=255,
+            size=(
                 cfg.hyperparameters.data.batch_size,
                 3,
                 cfg.hyperparameters.data.final_size,
                 cfg.hyperparameters.data.final_size,
             ),
+            dtype=torch.uint8,
             device=device,
-            dtypes=[torch.uint8],
+        )
+        summary(
+            model=model,
+            input_data=x,
+            device=device,
             mode="train",
         )
-
-    model = torch.jit.script(model)
+        model: Model = torch.jit.script(model, example_inputs=[(x,)])  # type: ignore[no-redef]
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(
