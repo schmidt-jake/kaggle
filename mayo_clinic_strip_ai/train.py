@@ -9,15 +9,12 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
-from torchmetrics import MaxMetric
-from torchmetrics import MetricCollection
-from torchmetrics import MinMetric
-from torchmetrics.classification import Accuracy
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
 from mayo_clinic_strip_ai.data import ROIDataset
 from mayo_clinic_strip_ai.data import StratifiedSampler
+from mayo_clinic_strip_ai.metrics import TrainMetrics
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
@@ -128,23 +125,13 @@ def train(cfg: DictConfig) -> None:
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
 
     # Create metrics
-    metrics = MetricCollection(
-        {
-            "raw_accuracy": Accuracy(),
-            # "calibration_error": CalibrationError(),
-            "weighted_accuracy": Accuracy(threshold=train_meta["label"].eq(POS_CLS).mean()),
-            # "auroc": AUROC(),
-        }
-    )
 
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
     print("device:", device)
     model.to(device=device, memory_format=torch.channels_last, non_blocking=True)
     loss_fn.to(device=device, non_blocking=True)
-    metrics.to(device=device, non_blocking=True)
-    min_pred = MinMetric().to(device=device, non_blocking=True)
-    max_pred = MaxMetric().to(device=device, non_blocking=True)
+    train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(
@@ -186,19 +173,10 @@ def train(cfg: DictConfig) -> None:
             with torch.autocast(device_type=img.device.type):
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
-                with torch.inference_mode():
-                    preds = logit.sigmoid().detach()
-                    min_pred.update(value=preds)
-                    max_pred.update(value=preds)
-                    metrics.update(preds=preds, target=label_id.detach())
-                    m = {k: v.item() for k, v in metrics.compute().items()}
-                    m["max_pred"] = max_pred.compute().item()
-                    m["min_pred"] = min_pred.compute().item()
-                    max_pred.reset()
-                    min_pred.reset()
-                    metrics.reset()
+            train_metrics.update(logit=logit, target=label_id)
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
+            train_metrics.update_max_grad_norm(model)
             torch.nn.utils.clip_grad_norm_(
                 parameters=model.parameters(),
                 max_norm=cfg.hyperparameters.model.max_grad_norm,
@@ -207,6 +185,7 @@ def train(cfg: DictConfig) -> None:
             grad_scaler.step(optimizer)
             grad_scaler.update()
             optimizer.zero_grad(set_to_none=True)
+            m = train_metrics.compute()
             m["loss"] = loss.item()
             print(m)
 
