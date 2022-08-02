@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
+from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -132,6 +133,24 @@ def train(cfg: DictConfig) -> None:
     model.to(device=device, memory_format=torch.channels_last, non_blocking=True)
     loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
+
+    summary(
+        model=model,
+        input_data=torch.randint(
+            low=0,
+            high=255,
+            size=(
+                cfg.hyperparameters.data.batch_size,
+                3,
+                cfg.hyperparameters.data.final_size,
+                cfg.hyperparameters.data.final_size,
+            ),
+            dtype=torch.uint8,
+            device=device,
+        ),
+        batch_dim=0,
+        mode="train",
+    )
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(

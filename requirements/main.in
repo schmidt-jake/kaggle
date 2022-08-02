@@ -4,5 +4,6 @@ opencv-python
 openslide-python
 pandas
 torch
+torchinfo
 torchmetrics
 torchvision
