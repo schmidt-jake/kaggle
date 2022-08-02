@@ -178,28 +178,25 @@ def train(cfg: DictConfig) -> None:
         for img, label_id in train_dataloader:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
-            for i in range(1000):
-                print(i)
-                with torch.autocast(device_type=img.device.type):
-                    logit: torch.Tensor = model(img)
-                    loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
-                    metrics.update(preds=logit.sigmoid(), target=label_id)
+            with torch.autocast(device_type=img.device.type):
+                logit: torch.Tensor = model(img)
+                loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
+                with torch.inference_mode():
+                    metrics.update(preds=logit.sigmoid().detach(), target=label_id.detach())
                     m = {k: v.item() for k, v in metrics.compute().items()}
                     metrics.reset()
-                grad_scaler.scale(loss).backward()
-                grad_scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(
-                    parameters=model.parameters(),
-                    max_norm=cfg.hyperparameters.model.max_grad_norm,
-                    error_if_nonfinite=False,
-                )
-                grad_scaler.step(optimizer)
-                grad_scaler.update()
-                optimizer.zero_grad(set_to_none=True)
-                m["loss"] = loss.item()
-                print(m)
-            break
-        break
+            grad_scaler.scale(loss).backward()
+            grad_scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                parameters=model.parameters(),
+                max_norm=cfg.hyperparameters.model.max_grad_norm,
+                error_if_nonfinite=False,
+            )
+            grad_scaler.step(optimizer)
+            grad_scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+            m["loss"] = loss.item()
+            print(m)
 
 
 if __name__ == "__main__":
