@@ -179,6 +179,7 @@ def train(cfg: DictConfig) -> None:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             for i in range(1000):
+                print(i)
                 with torch.autocast(device_type=img.device.type):
                     logit: torch.Tensor = model(img)
                     loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
@@ -197,6 +198,8 @@ def train(cfg: DictConfig) -> None:
                 optimizer.zero_grad(set_to_none=True)
                 m["loss"] = loss.item()
                 print(m)
+            break
+        break
 
 
 if __name__ == "__main__":
