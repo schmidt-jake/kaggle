@@ -17,6 +17,7 @@ from torchmetrics.classification import CalibrationError
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
 from mayo_clinic_strip_ai.data import ROIDataset
+from mayo_clinic_strip_ai.data import StratifiedSampler
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
@@ -153,7 +154,7 @@ def train(cfg: DictConfig) -> None:
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=cfg.hyperparameters.data.batch_size,
-        shuffle=True,
+        sampler=StratifiedSampler(metadata=train_meta[["label", "patient_id", "center_id"]]),
         pin_memory=torch.cuda.is_available(),
         pin_memory_device=str(device) if torch.cuda.is_available() else "",
         prefetch_factor=max(2, prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
