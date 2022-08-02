@@ -81,7 +81,7 @@ def train(cfg: DictConfig) -> None:
     train_meta = pd.merge(
         left=pd.read_csv(cfg.roi_path),
         right=pd.read_csv(cfg.metadata_path),
-        how="left",
+        how="inner",
         validate="m:1",
         on="image_id",
     ).astype(
@@ -178,24 +178,25 @@ def train(cfg: DictConfig) -> None:
         for img, label_id in train_dataloader:
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
-            with torch.autocast(device_type=img.device.type):
-                logit: torch.Tensor = model(img)
-                loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
-                metrics.update(preds=logit.sigmoid(), target=label_id)
-                m = {k: v.item() for k, v in metrics.compute().items()}
-                metrics.reset()
-            grad_scaler.scale(loss).backward()
-            grad_scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(
-                parameters=model.parameters(),
-                max_norm=cfg.hyperparameters.model.max_grad_norm,
-                error_if_nonfinite=False,
-            )
-            grad_scaler.step(optimizer)
-            grad_scaler.update()
-            optimizer.zero_grad(set_to_none=True)
-            m["loss"] = loss.item()
-            print(m)
+            for i in range(1000):
+                with torch.autocast(device_type=img.device.type):
+                    logit: torch.Tensor = model(img)
+                    loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
+                    metrics.update(preds=logit.sigmoid(), target=label_id)
+                    m = {k: v.item() for k, v in metrics.compute().items()}
+                    metrics.reset()
+                grad_scaler.scale(loss).backward()
+                grad_scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(
+                    parameters=model.parameters(),
+                    max_norm=cfg.hyperparameters.model.max_grad_norm,
+                    error_if_nonfinite=False,
+                )
+                grad_scaler.step(optimizer)
+                grad_scaler.update()
+                optimizer.zero_grad(set_to_none=True)
+                m["loss"] = loss.item()
+                print(m)
 
 
 if __name__ == "__main__":
