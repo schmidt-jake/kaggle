@@ -110,7 +110,23 @@ def load_tif(filepath: str) -> npt.NDArray[np.uint8]:
     return img
 
 
-def get_mask(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
+def threshold(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
+    thresh_otsu, mask_otsu = cv2.threshold(img, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
+    thresh_tri, mask_tri = cv2.threshold(img, thresh=0, maxval=255, type=cv2.THRESH_TRIANGLE)
+    if thresh_tri > thresh_otsu:
+        logger.debug("Using triangle algo")
+        return thresh_tri, mask_tri
+    else:
+        logger.debug("Using Otsu algo")
+        return thresh_otsu, mask_otsu
+
+
+def compute_blur(img: npt.NDArray[np.uint8]) -> float:
+    blur = cv2.Laplacian(img, cv2.CV_8U).var()
+    return blur
+
+
+def get_mask(img: npt.NDArray[np.uint8], ksize: int) -> npt.NDArray[np.uint8]:
     """
     Computes the foreground mask of an image.
 
@@ -131,23 +147,19 @@ def get_mask(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
         If an appropriate foreground threshold couldn't be found.
     """
     # NOTE: (empirically) order of operations is important:
-    # 1. Invert colors (opencv expects background to be black)
-    # 2. Convert to grayscale
-    # 3. Blur
-    # 4. Compute the foreground threshold
-    gray = cv2.cvtColor(cv2.bitwise_not(img), cv2.COLOR_RGB2GRAY)
-    blur = cv2.blur(gray, ksize=(501, 501))
-    thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
-    if thresh == 0.0:
-        logger.warning("Otsu algo failed to find foreground threshold. Falling back to triangle algo...")
-    thresh, mask = cv2.threshold(blur, thresh=0, maxval=255, type=cv2.THRESH_TRIANGLE)
+    # 1. Convert to grayscale
+    # 2. Blur
+    # 3. Compute the foreground threshold
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    blur = cv2.blur(gray, ksize=(ksize, ksize))
+    thresh, mask = threshold(img=blur)
     if thresh == 0.0:
         raise ImageError("Both Otsu and Triangle algos failed to find foreground threshold!")
     logger.debug(f"Foreground threshold: {thresh}")
-    return thresh, mask
+    return mask
 
 
-def find_ROIs(mask: npt.NDArray[np.uint8], min_gap_ratio: float = 0.1) -> List[Rect]:
+def find_ROIs(mask: npt.NDArray[np.uint8], ksize: int, min_gap_ratio: float = 0.1) -> List[Rect]:
     """
     Uses some assumptions/heuristics to locate Regions of Interest (ROIs) from a binary foreground mask
     of whole-slide histology images.
@@ -176,6 +188,7 @@ def find_ROIs(mask: npt.NDArray[np.uint8], min_gap_ratio: float = 0.1) -> List[R
     List[Rect]
         A list of coordinates for the minimal bounding boxes of each detected ROI.
     """
+    mask = get_mask(img, ksize=ksize)
     # the axis along which slices are separable is typically related to aspect ratio
     axis = 0 if mask.shape[1] > mask.shape[0] else 1
     min_gap = int(mask.shape[axis] * min_gap_ratio)
@@ -195,8 +208,6 @@ def find_ROIs(mask: npt.NDArray[np.uint8], min_gap_ratio: float = 0.1) -> List[R
     for offset, mask_split in zip(np.insert(split_offsets, 0, 0), mask_splits):
         if (mask_split > 0).any():  # this split contains foreground
             rect = Rect.from_mask(mask_split)
-            if rect.w < 1000 or rect.h < 1000:  # min size filter
-                logger.warning(f"ROI too small: w={rect.w} h={rect.h}")
             if axis == 1:
                 rect.y += offset
             elif axis == 0:
@@ -205,38 +216,17 @@ def find_ROIs(mask: npt.NDArray[np.uint8], min_gap_ratio: float = 0.1) -> List[R
     return ROIs
 
 
-def process_img(img: npt.NDArray[np.uint8]) -> Tuple[float, List[Rect]]:
-    """
-    The entrypoint into the ROI-finding routine.
+def smooth_contour(contour: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+    # epsilon = 0.1 * cv2.arcLength(contour, True)
+    # contour = cv2.approxPolyDP(contour, epsilon, True)
+    return contour
 
-    Parameters
-    ----------
-    img : npt.NDArray[np.uint8]
-        A channels-last RGB image
 
-    Returns
-    -------
-    Tuple[float, List[Rect]]
-        (threshold, ROIs)
-
-    Raises
-    ------
-    ImageError
-        If the input image is malformed
-    ROIError
-        If no ROIs were detected in the image
-    """
-    if img.ndim != 3:
-        raise ImageError(f"Got wrong number of dimensions: {img.ndim}")
-
-    if img.shape[2] != 3:
-        raise ImageError("Image isn't RGB or channels last")
-
-    thresh, mask = get_mask(img)
-    ROIs = find_ROIs(mask)
-    if len(ROIs) == 0:
-        raise ROIError("Found no ROIs!")
-    return thresh, ROIs
+def find_contours(img: npt.NDArray[np.uint8], ksize: int) -> List[npt.NDArray[np.int32]]:
+    mask = get_mask(img, ksize=ksize)
+    contours, hierarchy = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE)
+    contours = [smooth_contour(c).squeeze() for c in contours if cv2.contourArea(c) > 1024**2]
+    return contours
 
 
 if __name__ == "__main__":
@@ -262,24 +252,31 @@ if __name__ == "__main__":
 
     meta = pd.read_csv(
         args.input_filepath,
-        dtypes={
+        dtype={
             "image_id": "string",
         },
-        use_cols=["image_id"],
+        usecols=["image_id"],
     )
 
     with open(os.path.join(args.output_dir, "ROIs.csv"), "w", buffering=1) as f:
-        f.write("image_id,roi_num,x,y,w,h,thresh\n")
+        f.write("image_id,roi_num,x,y,w,h\n")
         for row_num, row in meta.iterrows():
             filepath = os.path.join(args.data_dir, row["image_id"] + ".tif")
             logger.debug(f"Starting on {filepath}...")
             img = load_tif(filepath)
-            try:
-                thresh, ROIs = process_img(img)
-            except (ImageError, ROIError) as e:
-                logger.error(f"Error with image {filepath}:\n{e}")
-            else:
-                for roi_num, roi in enumerate(ROIs):
-                    f.write(f"{row['image_id']},{roi_num},{roi.x},{roi.y},{roi.w},{roi.h},{thresh}\n")
-                    logger.debug(f"Split {roi_num} saved.")
+            img = cv2.bitwise_not(img)  # opencv expects background to be black
+            # ROIs = find_ROIs(img, ksize=1024)
+            # for roi_num, roi in enumerate(ROIs):
+            # f.write(f"{row['image_id']},{roi_num},{roi.x},{roi.y},{roi.w},{roi.h}\n")
+            contours = find_contours(img, ksize=256)
+            if len(contours) > 0:
+                pth = os.path.join(args.output_dir, row["image_id"])
+                os.makedirs(pth, exist_ok=True)
+                for roi_num, contour in enumerate(contours):
+                    np.save(os.path.join(pth, str(roi_num)), contour, allow_pickle=False)
+                    x, y, w, h = cv2.boundingRect(contour)
+                    f.write(f"{row['image_id']},{roi_num},{x},{y},{w},{h}\n")
+                    logger.debug(f"ROI {roi_num} saved.")
                 logger.debug("Done with image!")
+            else:
+                logger.warning("No contours found.")

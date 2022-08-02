@@ -25,6 +25,6 @@ def tif_img_path(tmp_path: Path) -> Path:
 @pytest.mark.parametrize("training", [True, False])
 def test_roidataset(tif_img_path: Path, training: bool):
     metadata = pd.DataFrame([{"image_id": "img", "label": "LAA", "x": 0, "y": 0, "h": 512, "w": 512}])
-    dataset = data.ROIDataset(training=training, metadata=metadata, data_dir=os.path.dirname(tif_img_path))
+    dataset = data.ROIDataset(training=training, metadata=metadata, tif_dir=os.path.dirname(tif_img_path))
     for i in range(len(dataset)):
         print(dataset[i])

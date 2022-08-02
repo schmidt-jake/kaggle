@@ -13,6 +13,7 @@ import numpy as np
 import numpy.typing as npt
 from openslide import OpenSlide
 import pandas as pd
+from scipy.stats import mode
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
@@ -20,13 +21,17 @@ from torchvision.transforms import RandomVerticalFlip
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
 
+# from mayo_clinic_strip_ai.stain import normalize_staining
+
 POS_CLS = "LAA"
 NEG_CLS = "CE"
 LABEL_MAP = {POS_CLS: 1, NEG_CLS: 0}
 
 
 class ROIDataset(Dataset):
-    def __init__(self, metadata: pd.DataFrame, training: bool, data_dir: str, crop_size: int = 512) -> None:
+    def __init__(
+        self, metadata: pd.DataFrame, training: bool, tif_dir: str, outline_dir: str, crop_size: int = 512
+    ) -> None:
         """
         A dataset that loads image crops efficiently using Region-of-Interest (ROI) bounding box coordinates.
 
@@ -45,9 +50,10 @@ class ROIDataset(Dataset):
         training : bool
             If True, takes a random crop from an ROI and applies random augmentations.
             If False, takes a center crop.
-        data_dir : str
+        tif_dir : str
             The path to a directory containing TIF images, such that data_dir/image_id.tif
             is a valid filepath.
+        outline_dir : str
         crop_size : int, optional
             The side length (in pixels) of square crops to produce, by default 512
         """
@@ -58,7 +64,8 @@ class ROIDataset(Dataset):
         self.random_vflip = RandomVerticalFlip()
         self.training = training
         self.crop_size = crop_size
-        self.data_dir = data_dir
+        self.tif_dir = tif_dir
+        self.outline_dir = outline_dir
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -88,6 +95,7 @@ class ROIDataset(Dataset):
         )
         x = np.array(x)
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
+        # x, H, E = normalize_staining(x)
         x = cv2.bitwise_not(x)
         return x
 
@@ -140,7 +148,7 @@ class ROIDataset(Dataset):
         """
         x = self._random_crop(img=img, roi=roi)
         i = 0
-        while x.mean() < 20.0:
+        while mode(x, axis=None, keepdims=False).mode < 20.0:
             if i > 10:
                 print("Couldn't find a good crop!")
                 break
@@ -172,24 +180,43 @@ class ROIDataset(Dataset):
         row = self.metadata.iloc[index]
         if row["h"] < self.crop_size or row["w"] < self.crop_size:
             raise ValueError("ROI is smaller than crop size!")
-        img = OpenSlide(os.path.join(self.data_dir, row["image_id"] + ".tif"))
+        img = OpenSlide(os.path.join(self.tif_dir, row["image_id"] + ".tif"))
         if img.level_count > 1:
             raise ValueError(f"Got {img.level_count} levels!")
-        roi = Rect(x=row["x"], y=row["y"], w=row["w"], h=row["h"])
-        if self.training:
-            img = self.valid_random_crop(img=img, roi=roi)
-        else:
-            x_offset = (roi.w - self.crop_size) // 2
-            y_offset = (roi.h - self.crop_size) // 2
-            img = self._read_region(
-                img=img,
-                crop=Rect(
-                    x=roi.x + x_offset,
-                    y=roi.y + y_offset,
-                    w=self.crop_size,
-                    h=self.crop_size,
-                ),
-            )
+        outline: npt.NDArray[np.int32] = np.load(
+            os.path.join(self.outline_dir, row["image_id"], str(row["roi_num"]) + ".npy"),
+            mmap_mode="r",
+            allow_pickle=False,
+        )
+
+        M = cv2.moments(outline)
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        img = self._read_region(
+            img=img,
+            crop=Rect(
+                x=cx - (self.crop_size // 2),
+                y=cy - (self.crop_size // 2),
+                w=self.crop_size,
+                h=self.crop_size,
+            ),
+        )
+
+        # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
+        # if self.training:
+        #     img = self.valid_random_crop(img=img, roi=roi)
+        # else:
+        #     x_offset = (roi.w - self.crop_size) // 2
+        #     y_offset = (roi.h - self.crop_size) // 2
+        #     img = self._read_region(
+        #         img=img,
+        #         crop=Rect(
+        #             x=roi.x + x_offset,
+        #             y=roi.y + y_offset,
+        #             w=self.crop_size,
+        #             h=self.crop_size,
+        #         ),
+        #     )
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
         if self.training:

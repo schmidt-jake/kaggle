@@ -130,6 +130,7 @@ dmypy.json
 
 *.csv
 *.tif
+*.npy
 *log.txt
 !*dataset-metadata.json
 outputs

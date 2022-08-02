@@ -1,5 +1,6 @@
 from math import log
 from multiprocessing import cpu_count
+import os
 from typing import Type
 
 import hydra
@@ -143,7 +144,9 @@ def train(cfg: DictConfig) -> None:
     train_dataset = ROIDataset(
         metadata=train_meta,
         training=True,
-        data_dir=cfg.tif_dir,
+        tif_dir=cfg.tif_dir,
+        outline_dir=os.path.dirname(cfg.roi_path),
+        crop_size=cfg.hyperparameters.data.crop_size,
     )
     num_workers = cpu_count()  # use all CPUs
     prefetch_batches = 4
