@@ -28,3 +28,12 @@ def test_roidataset(tif_img_path: Path, training: bool):
     dataset = data.ROIDataset(training=training, metadata=metadata, tif_dir=os.path.dirname(tif_img_path))
     for i in range(len(dataset)):
         print(dataset[i])
+
+
+def test_stratified_batch_sampler():
+    rois = pd.read_csv("mayo_clinic_strip_ai/data/ROIs/train/ROIs.csv")
+    meta = pd.read_csv("mayo_clinic_strip_ai/data/train.csv")
+    levels = rois.merge(meta, on="image_id", how="inner", validate="m:1")
+    batch_sampler = data.StratifiedBatchSampler(levels=levels[["label"]], batch_size=10)
+    for batch in batch_sampler:
+        assert len(batch) == batch_sampler.batch_size
