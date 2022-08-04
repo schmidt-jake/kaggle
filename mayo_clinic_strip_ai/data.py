@@ -252,13 +252,14 @@ class StratifiedBatchSampler(object):
             self.p *= col.map(_col_cls_weight.get).astype(np.float32).values
         self.p /= self.p.sum()
         self.rng = np.random.default_rng()
+        self.indices = np.arange(start=0, stop=len(self.p), dtype=np.int32)
 
     def __len__(self) -> int:
         return len(self.p) // self.batch_size
 
     def __iter__(self) -> Generator[npt.NDArray[np.int32], None, None]:
         indices = self.rng.choice(
-            a=self.p,
+            a=self.indices,
             size=len(self.p),
             replace=False,
             p=self.p,
