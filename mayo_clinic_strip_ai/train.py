@@ -2,6 +2,7 @@ from math import log
 from multiprocessing import cpu_count
 import os
 
+from functorch.compile import memory_efficient_fusion
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -121,8 +122,9 @@ def train(cfg: DictConfig) -> None:
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
     print("device:", device)
-    model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
-    loss_fn.to(device=device, non_blocking=True)
+    model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
+    model = memory_efficient_fusion(model)
+    loss_fn = loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
     # Create dataset and dataloader
