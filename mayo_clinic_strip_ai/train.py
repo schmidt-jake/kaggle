@@ -155,7 +155,7 @@ def train(cfg: DictConfig) -> None:
     grad_scaler = torch.cuda.amp.GradScaler()
 
     print("num workers:", num_workers)
-    print("prefetch factor:", train_dataloader.prefetch_factor)
+    print("prefetch samples per worker:", train_dataloader.prefetch_factor)
 
     # begin the training loop
     for epoch in range(cfg.hyperparameters.data.epochs):
