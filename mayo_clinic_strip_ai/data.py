@@ -6,7 +6,7 @@ Docs:
 https://pytorch.org/docs/stable/data.html
 """
 import os
-from typing import Dict, Tuple, Union
+from typing import Dict, Generator, Tuple, Union
 
 import cv2
 import numpy as np
@@ -16,7 +16,6 @@ import pandas as pd
 from scipy.stats import mode
 import torch
 from torch.utils.data import Dataset
-from torch.utils.data import WeightedRandomSampler
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 from torchvision.transforms import Resize
@@ -239,15 +238,33 @@ class ROIDataset(Dataset):
             return img
 
 
-class StratifiedSampler(WeightedRandomSampler):
+class StratifiedBatchSampler(object):
     @staticmethod
     def get_class_weights(y: pd.Series) -> Dict[str, float]:
         cls_weights = len(y) / (y.nunique() * y.value_counts())
         return cls_weights.to_dict()
 
-    def __init__(self, metadata: pd.DataFrame) -> None:
-        sample_weights = pd.Series(1.0, index=metadata.index, dtype=np.float32, name="sample_weight")
-        for name, col in metadata.iteritems():
+    def __init__(self, levels: pd.DataFrame, batch_size: int) -> None:
+        self.batch_size = batch_size
+        self.p = np.ones(shape=len(levels), dtype=np.float32)
+        for name, col in levels.iteritems():
             _col_cls_weight = self.get_class_weights(col)
-            sample_weights *= col.map(_col_cls_weight.get).astype(np.float32)
-        super().__init__(weights=sample_weights, num_samples=len(metadata), replacement=False)
+            self.p *= col.map(_col_cls_weight.get).astype(np.float32).values
+        self.p /= self.p.sum()
+        self.rng = np.random.default_rng()
+
+    def __len__(self) -> int:
+        return len(self.p) // self.batch_size
+
+    def __iter__(self) -> Generator[npt.NDArray[np.int32], None, None]:
+        indices = self.rng.choice(
+            a=self.p,
+            size=len(self.p),
+            replace=False,
+            p=self.p,
+            shuffle=True,
+        )
+        n_batches = len(self)
+        for i in range(n_batches):
+            batch_indices = indices[i::n_batches]
+            yield batch_indices[: self.batch_size]

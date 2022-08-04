@@ -8,11 +8,15 @@ hyperparameters:
     crop_size: 2048
     final_size: 256
     epochs: 10
+    stratification_levels:
+      - label
+      - center_id
+      - patient_id
   model:
     backbone_fn: densenet161
     weights: DenseNet161_Weights.DEFAULT
     max_grad_norm: 1.0
   optimizer:
-    cls: AdamW
+    _target_: torch.optim.AdamW
     lr: 0.002
     weight_decay: 0.001

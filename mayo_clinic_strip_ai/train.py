@@ -1,29 +1,25 @@
 from math import log
 from multiprocessing import cpu_count
 import os
-from typing import Type
 
 import hydra
+from hydra.utils import instantiate
 from omegaconf import DictConfig
 import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
-from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
 from mayo_clinic_strip_ai.data import ROIDataset
-from mayo_clinic_strip_ai.data import StratifiedSampler
+from mayo_clinic_strip_ai.data import StratifiedBatchSampler
 from mayo_clinic_strip_ai.metrics import TrainMetrics
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
 from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
-
-# from torchmetrics.classification import CalibrationError
-# from torchmetrics import AUROC
 
 
 def get_pos_weight(y: pd.Series) -> float:
@@ -114,13 +110,8 @@ def train(cfg: DictConfig) -> None:
         ),
     )
 
-    # Create the optimizer
-    optimizer_cls: Type[torch.optim.Optimizer] = getattr(torch.optim, cfg.hyperparameters.optimizer.cls)
-    optimizer: torch.optim.Optimizer = optimizer_cls(  # type: ignore[call-arg]
-        model.parameters(),
-        lr=cfg.hyperparameters.optimizer.lr,
-        weight_decay=cfg.hyperparameters.optimizer.weight_decay,
-    )
+    # https://hydra.cc/docs/advanced/instantiate_objects/overview/
+    optimizer: torch.optim.Optimizer = instantiate(cfg.hyperparameters.optimizer, params=model.parameters())
 
     # Create the loss function
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
@@ -134,27 +125,6 @@ def train(cfg: DictConfig) -> None:
     loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
-    with torch.autocast(device_type=device.type):
-        x = torch.randint(
-            low=0,
-            high=255,
-            size=(
-                cfg.hyperparameters.data.batch_size,
-                3,
-                cfg.hyperparameters.data.final_size,
-                cfg.hyperparameters.data.final_size,
-            ),
-            dtype=torch.uint8,
-            device=device,
-        )
-        summary(
-            model=model,
-            input_data=x,
-            device=device,
-            mode="train",
-        )
-        model: Model = torch.jit.script(model, example_inputs=[(x,)])  # type: ignore[no-redef]
-
     # Create dataset and dataloader
     train_dataset = ROIDataset(
         metadata=train_meta,
@@ -167,13 +137,14 @@ def train(cfg: DictConfig) -> None:
     num_workers = cpu_count()  # use all CPUs
     train_dataloader = DataLoader(
         dataset=train_dataset,
-        batch_size=cfg.hyperparameters.data.batch_size,
-        sampler=StratifiedSampler(metadata=train_meta[["label", "patient_id", "center_id"]]),
+        batch_sampler=StratifiedBatchSampler(  # type: ignore[arg-type]
+            levels=train_meta[cfg.hyperparameters.data.stratification_levels],
+            batch_size=cfg.hyperparameters.data.batch_size,
+        ),
         pin_memory=torch.cuda.is_available(),
         pin_memory_device=str(device) if torch.cuda.is_available() else "",
         prefetch_factor=max(2, cfg.prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
         num_workers=num_workers,
-        drop_last=torch.backends.cudnn.benchmark,
         persistent_workers=True,
     )
 
