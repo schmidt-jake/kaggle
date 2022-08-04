@@ -18,7 +18,6 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
-from torchvision.transforms import Resize
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
 
@@ -69,7 +68,7 @@ class ROIDataset(Dataset):
         self.metadata = metadata
         self.random_hflip = RandomHorizontalFlip()
         self.random_vflip = RandomVerticalFlip()
-        self.resize = Resize(size=final_size)
+        self.final_size = final_size
         self.training = training
         self.crop_size = crop_size
         self.tif_dir = tif_dir
@@ -78,8 +77,7 @@ class ROIDataset(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
-    @staticmethod
-    def _read_region(img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
+    def _read_region(self, img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
         """
         Reads a region of an image into memory and returns a 3-channel RGB image,
         channels last.
@@ -103,6 +101,7 @@ class ROIDataset(Dataset):
         )
         x = np.array(x)
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
+        x = cv2.resize(x, dsize=(self.final_size, self.final_size), interpolation=cv2.INTER_CUBIC)
         # x, H, E = normalize_staining(x)
         x = cv2.bitwise_not(x)
         return x
@@ -227,7 +226,6 @@ class ROIDataset(Dataset):
         #     )
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
-        img = self.resize(img)
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)
