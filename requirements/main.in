@@ -1,9 +1,9 @@
+functorch
 hydra-core
 kaggle
 opencv-python
 openslide-python
 pandas
 torch
-torchinfo
 torchmetrics
 torchvision
