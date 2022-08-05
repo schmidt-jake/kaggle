@@ -4,6 +4,7 @@ import os
 
 from functorch.compile import memory_efficient_fusion
 import hydra
+from hydra.utils import call
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 import pandas as pd
@@ -94,25 +95,23 @@ def train(cfg: DictConfig) -> None:
 
     # Filter out ROIs that are too small
     train_meta.query(
-        f"h >= {cfg.hyperparameters.data.crop_size} and w >= {cfg.hyperparameters.data.crop_size}",
+        f"h >= {cfg.hparams.data.crop_size} and w >= {cfg.hparams.data.crop_size}",
         inplace=True,
     )
 
     # Create the model
+    backbone = instantiate(cfg.hparams.model.backbone)
     model = Model(
         normalizer=Normalizer(),
-        feature_extractor=FeatureExtractor(
-            backbone_fn=cfg.hyperparameters.model.backbone_fn,
-            weights=cfg.hyperparameters.model.weights,
-        ),
+        feature_extractor=FeatureExtractor(backbone=backbone),
         classifier=Classifier(
             initial_logit_bias=get_bias(train_meta["label"]),
-            in_features=2208,  # FIXME: auto-set this based on feature_extractor output
+            in_features=backbone.classifier.in_features,
         ),
     )
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
-    optimizer: torch.optim.Optimizer = instantiate(cfg.hyperparameters.optimizer, params=model.parameters())
+    optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
 
     # Create the loss function
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
@@ -133,19 +132,19 @@ def train(cfg: DictConfig) -> None:
         training=True,
         tif_dir=cfg.tif_dir,
         outline_dir=os.path.dirname(cfg.roi_path),
-        crop_size=cfg.hyperparameters.data.crop_size,
-        final_size=cfg.hyperparameters.data.final_size,
+        crop_size=cfg.hparams.data.crop_size,
+        final_size=cfg.hparams.data.final_size,
     )
     num_workers = cpu_count()  # use all CPUs
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=StratifiedBatchSampler(  # type: ignore[arg-type]
-            levels=train_meta[cfg.hyperparameters.data.stratification_levels],
-            batch_size=cfg.hyperparameters.data.batch_size,
+            levels=train_meta[cfg.hparams.data.stratification_levels],
+            batch_size=cfg.hparams.data.batch_size,
         ),
         pin_memory=torch.cuda.is_available(),
         pin_memory_device=str(device) if torch.cuda.is_available() else "",
-        prefetch_factor=max(2, cfg.prefetch_batches * cfg.hyperparameters.data.batch_size // num_workers),
+        prefetch_factor=max(2, cfg.prefetch_batches * cfg.hparams.data.batch_size // num_workers),
         num_workers=num_workers,
         persistent_workers=True,
     )
@@ -154,11 +153,17 @@ def train(cfg: DictConfig) -> None:
     # Docs: https://pytorch.org/docs/stable/notes/amp_examples.html
     grad_scaler = torch.cuda.amp.GradScaler()
 
+    lr_scheduler: torch.optim.lr_scheduler._LRScheduler = instantiate(
+        cfg.hparams.lr_scheduler,
+        optimizer=optimizer,
+        verbose=True,
+    )
+
     print("num workers:", num_workers)
     print("prefetch samples per worker:", train_dataloader.prefetch_factor)
 
     # begin the training loop
-    for epoch in range(cfg.hyperparameters.data.epochs):
+    for epoch in range(cfg.hparams.data.epochs):
         print("Starting epoch", epoch)
         model.train()
         for img, label_id in train_dataloader:
@@ -171,10 +176,11 @@ def train(cfg: DictConfig) -> None:
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
             train_metrics.update_max_grad_norm(model)
-            torch.nn.utils.clip_grad_norm_(
+            call(
+                cfg.hparams.backward,
                 parameters=model.parameters(),
-                max_norm=cfg.hyperparameters.model.max_grad_norm,
                 error_if_nonfinite=False,
+                verbose=True,
             )
             grad_scaler.step(optimizer)
             grad_scaler.update()
@@ -183,6 +189,10 @@ def train(cfg: DictConfig) -> None:
             train_metrics.reset()
             m["loss"] = loss.item()
             print(m)
+        lr_scheduler.step()
+
+    print("Saving model...")
+    torch.jit.script(model).save("model.torchscript")
 
 
 if __name__ == "__main__":
