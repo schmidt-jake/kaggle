@@ -180,7 +180,6 @@ def train(cfg: DictConfig) -> None:
                 cfg.hparams.backward,
                 parameters=model.parameters(),
                 error_if_nonfinite=False,
-                verbose=True,
             )
             grad_scaler.step(optimizer)
             grad_scaler.update()
