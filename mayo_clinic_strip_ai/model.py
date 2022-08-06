@@ -1,10 +1,9 @@
 """
 Defines the neural network architecture
 """
-from typing import Optional
+
 
 import torch
-from torchvision import models
 
 
 class Normalizer(torch.nn.Module):
@@ -31,35 +30,24 @@ class Normalizer(torch.nn.Module):
         return img
 
 
-class FeatureExtractor(torch.nn.Module):
-    def __init__(self, backbone_fn: str, weights: Optional[str] = None):
+class FeatureExtractor(torch.nn.Sequential):
+    def __init__(self, backbone: torch.nn.Module):
         """
         Extracts a feature vector from a normalized RGB image, using a backbone architecture.
 
         Parameters
         ----------
-        backbone_fn : str
-            A valid callable attribute on `torchvision.models`
-        weights : Optional[str]
-            A string to be passed to `torchvision.models.get_weights`, default None
-            Example: "ResNet50_Weights.IMAGENET1K_V1"
+        backbone: a model from `torchvision.models`.
         """
-        super().__init__()
-        if weights is not None:
-            weights = models.get_weight(weights)
-        backbone: torch.nn.Module = getattr(models, backbone_fn)(weights=weights)
-        self.features: torch.nn.Sequential = backbone.features  # type: ignore[assignment]
-        self.features.append(torch.nn.ReLU(inplace=True))
-        self.features.append(torch.nn.AdaptiveAvgPool2d(output_size=(1, 1)))
-        self.features.append(torch.nn.Flatten(start_dim=1))
-
-    # @torch.jit.script_method
-    def forward(self, img: torch.Tensor) -> torch.Tensor:
-        features = self.features(img)
-        return features
+        super().__init__(
+            backbone.features,  # type: ignore[arg-type]
+            torch.nn.ReLU(inplace=True),
+            torch.nn.AdaptiveAvgPool2d(output_size=(1, 1)),
+            torch.nn.Flatten(start_dim=1),
+        )
 
 
-class Classifier(torch.nn.Module):
+class Classifier(torch.nn.Sequential):
     def __init__(self, initial_logit_bias: float, in_features: int):
         """
         A linear binary classifier.
@@ -72,19 +60,15 @@ class Classifier(torch.nn.Module):
         in_features : int
             The dimension of the input to the classifier.
         """
-        super().__init__()
-        self.logit = torch.nn.Linear(in_features=in_features, out_features=1)
-        self.logit.bias = torch.nn.Parameter(
+        logit = torch.nn.Linear(in_features=in_features, out_features=1)
+        logit.bias = torch.nn.Parameter(
             torch.tensor(initial_logit_bias, requires_grad=True),
             requires_grad=True,
         )
-
-    # @torch.jit.script_method
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.logit(x)
+        super().__init__(torch.nn.BatchNorm1d(in_features), logit)
 
 
-class Model(torch.nn.Module):
+class Model(torch.nn.Sequential):
     def __init__(self, normalizer: Normalizer, feature_extractor: FeatureExtractor, classifier: Classifier):
         """
         A binary classifier over RGB images.
@@ -98,19 +82,7 @@ class Model(torch.nn.Module):
         classifier : Classifier
             A binary classifier.
         """
-        super().__init__()
-        self.normalizer = normalizer
-        self.feature_extractor = feature_extractor
-        self.classifier = classifier
-        self.activation = torch.nn.ReLU(inplace=True)
-
-    # @torch.jit.script_method
-    def forward(self, img: torch.Tensor) -> torch.Tensor:
-        x: torch.Tensor = self.normalizer(img)
-        x = self.feature_extractor(x)
-        x = self.activation(x)
-        logit: torch.Tensor = self.classifier(x)
-        return logit
+        super().__init__(normalizer, feature_extractor, classifier)
 
 
 class Loss(torch.nn.Module):

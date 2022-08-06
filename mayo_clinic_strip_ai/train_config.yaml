@@ -2,9 +2,9 @@ tif_dir: /kaggle/input/mayo-clinic-strip-ai/train/
 metadata_path: /kaggle/input/mayo-clinic-strip-ai/train.csv
 roi_path: /kaggle/input/mayo-rois/train/ROIs.csv
 prefetch_batches: 8
-hyperparameters:
+hparams:
   data:
-    batch_size: 16
+    batch_size: 64
     crop_size: 2048
     final_size: 256
     epochs: 10
@@ -12,11 +12,19 @@ hyperparameters:
       - label
       - center_id
       - patient_id
+    min_intersect_pct: 0.99
   model:
-    backbone_fn: densenet161
-    weights: DenseNet161_Weights.DEFAULT
-    max_grad_norm: 1.0
+    backbone:
+      _target_: torchvision.models.densenet161
+      weights: DenseNet161_Weights.DEFAULT
   optimizer:
     _target_: torch.optim.AdamW
     lr: 0.002
     weight_decay: 0.001
+  backward:
+    _target_: torch.nn.utils.clip_grad_norm_
+    max_norm: 5.0
+  lr_scheduler:
+    _target_: torch.optim.lr_scheduler.ConstantLR
+    factor: 1.0
+random_seed: 42

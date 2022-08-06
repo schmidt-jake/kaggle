@@ -7,6 +7,7 @@ openslide-python
 pandas
 scipy
 torch
+torchinfo
 torchmetrics
 torchvision
 tensorboard

@@ -13,7 +13,8 @@ import numpy as np
 import numpy.typing as npt
 from openslide import OpenSlide
 import pandas as pd
-from scipy.stats import mode
+
+# from scipy.stats import mode
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
@@ -37,6 +38,7 @@ class ROIDataset(Dataset):
         outline_dir: str,
         crop_size: int,
         final_size: int,
+        min_intersect_pct: float,
     ) -> None:
         """
         A dataset that loads image crops efficiently using Region-of-Interest (ROI) bounding box coordinates.
@@ -73,6 +75,7 @@ class ROIDataset(Dataset):
         self.crop_size = crop_size
         self.tif_dir = tif_dir
         self.outline_dir = outline_dir
+        self.min_intersect_pct = min_intersect_pct
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -135,33 +138,47 @@ class ROIDataset(Dataset):
             ),
         )
 
-    def valid_random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
-        """
-        Generates a RGB, channels-last array of shape (self.crop_size, self.crop_size, 3)
-        from a random area of the provided ROI coordinates, trying to ensure that the crop doesn't
-        have too much dead space / background.
+    # def valid_random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
+    #     """
+    #     Generates a RGB, channels-last array of shape (self.crop_size, self.crop_size, 3)
+    #     from a random area of the provided ROI coordinates, trying to ensure that the crop doesn't
+    #     have too much dead space / background.
 
-        Parameters
-        ----------
-        img : OpenSlide
-            The image object to read
-        roi : Rect
-            The ROI coordinates from which to generate a random crop
+    #     Parameters
+    #     ----------
+    #     img : OpenSlide
+    #         The image object to read
+    #     roi : Rect
+    #         The ROI coordinates from which to generate a random crop
 
-        Returns
-        -------
-        npt.NDArray[np.uint8]
-            The RGB, channels-last (HWC) pixel array.
-        """
-        x = self._random_crop(img=img, roi=roi)
+    #     Returns
+    #     -------
+    #     npt.NDArray[np.uint8]
+    #         The RGB, channels-last (HWC) pixel array.
+    #     """
+    #     x = self._random_crop(img=img, roi=roi)
+    #     i = 0
+    #     while mode(x, axis=None, keepdims=False).mode < 20.0:
+    #         if i > 10:
+    #             print("Couldn't find a good crop!")
+    #             break
+    #         x = self._random_crop(img=img, roi=roi)
+    #         i += 1
+    #     return x
+
+    def valid_random_crop(self, outline: npt.NDArray[np.int32]) -> Tuple[int, int]:
+        ctr_min = outline.min(axis=0)
+        w, h = outline.max(axis=0) - ctr_min
+        mask = cv2.fillPoly(img=np.zeros((w, h), dtype=np.uint8), pts=[outline - outline.min(axis=0)], color=1)
         i = 0
-        while mode(x, axis=None, keepdims=False).mode < 20.0:
-            if i > 10:
-                print("Couldn't find a good crop!")
-                break
-            x = self._random_crop(img=img, roi=roi)
+        while i < 200:
+            x_offset = np.random.randint(low=0, high=w - self.crop_size, dtype=outline.dtype)
+            y_offset = np.random.randint(low=0, high=h - self.crop_size, dtype=outline.dtype)
+            crop = mask[y_offset : y_offset + self.crop_size, x_offset : x_offset + self.crop_size]
+            if crop.mean() >= self.min_intersect_pct:
+                return x_offset + ctr_min[0], y_offset + ctr_min[1]
             i += 1
-        return x
+        raise RuntimeError("Couldn't find a good crop!")
 
     def __getitem__(self, index: int) -> Union[Tuple[torch.Tensor, int], torch.Tensor]:
         """
@@ -192,22 +209,14 @@ class ROIDataset(Dataset):
             raise ValueError(f"Got {img.level_count} levels!")
         outline: npt.NDArray[np.int32] = np.load(
             os.path.join(self.outline_dir, row["image_id"], str(row["roi_num"]) + ".npy"),
-            mmap_mode="r",
             allow_pickle=False,
         )
 
-        M = cv2.moments(outline)
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        img = self._read_region(
-            img=img,
-            crop=Rect(
-                x=cx - (self.crop_size // 2),
-                y=cy - (self.crop_size // 2),
-                w=self.crop_size,
-                h=self.crop_size,
-            ),
-        )
+        try:
+            x, y = self.valid_random_crop(outline)
+        except RuntimeError as e:
+            raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
+        img = self._read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
 
         # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
         # if self.training:
@@ -242,14 +251,14 @@ class StratifiedBatchSampler(object):
         cls_weights = len(y) / (y.nunique() * y.value_counts())
         return cls_weights.to_dict()
 
-    def __init__(self, levels: pd.DataFrame, batch_size: int) -> None:
+    def __init__(self, levels: pd.DataFrame, batch_size: int, seed: int) -> None:
         self.batch_size = batch_size
         self.p = np.ones(shape=len(levels), dtype=np.float32)
         for name, col in levels.iteritems():
             _col_cls_weight = self.get_class_weights(col)
             self.p *= col.map(_col_cls_weight.get).astype(np.float32).values
         self.p /= self.p.sum()
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng(seed)
         self.indices = np.arange(start=0, stop=len(self.p), dtype=np.int32)
 
     def __len__(self) -> int:
