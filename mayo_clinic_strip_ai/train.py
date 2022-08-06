@@ -113,14 +113,14 @@ def train(cfg: DictConfig) -> None:
         ),
     )
     model = memory_efficient_fusion(model)
-    with torch.autocast(device_type=device.type):
-        summary(
-            model=model,
-            input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
-            device=device,
-            dtypes=[torch.uint8],
-            mode="train",
-        )
+    # with torch.autocast(device_type=device.type):
+    #     summary(
+    #         model=model,
+    #         input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
+    #         device=device,
+    #         dtypes=[torch.uint8],
+    #         mode="train",
+    #     )
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
     optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
