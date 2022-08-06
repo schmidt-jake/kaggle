@@ -110,6 +110,7 @@ def train(cfg: DictConfig) -> None:
             in_features=backbone.classifier.in_features,
         ),
     )
+    model = memory_efficient_fusion(model)
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
     optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
@@ -117,13 +118,10 @@ def train(cfg: DictConfig) -> None:
     # Create the loss function
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
 
-    # Create metrics
-
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
     print("device:", device)
     model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
-    model = memory_efficient_fusion(model)
     with torch.autocast(device_type=device.type):
         summary(
             model=model,
