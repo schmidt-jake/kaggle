@@ -6,9 +6,11 @@ pip install -U pip setuptools wheel
 
 pip install pip-compile-multi
 
+UPGRADE_FLAG=${1:-"--no-upgrade"}
+
 pip-compile-multi \
     --autoresolve \
     --live \
-    --no-upgrade \
+    $UPGRADE_FLAG \
     --use-cache \
     --directory=requirements
