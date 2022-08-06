@@ -1,3 +1,4 @@
+from logging import getLogger
 from math import log
 from multiprocessing import cpu_count
 import os
@@ -14,6 +15,7 @@ import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -26,7 +28,7 @@ from mayo_clinic_strip_ai.model import Loss
 from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
 
-# from torchinfo import summary
+logger = getLogger(__name__)
 
 
 def get_pos_weight(y: pd.Series) -> float:
@@ -84,6 +86,7 @@ def train(cfg: DictConfig) -> None:
     torch.backends.cudnn.benchmark = True
 
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
+    logger.info(f"Using device: {device}")
 
     # Load the training metadata, including image labels and ROI coordinates
     train_meta = pd.merge(
@@ -119,15 +122,15 @@ def train(cfg: DictConfig) -> None:
             in_features=backbone.classifier.in_features,
         ),
     )
-    model = memory_efficient_fusion(model)
-    # with torch.autocast(device_type=device.type):
-    #     summary(
-    #         model=model,
-    #         input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
-    #         device=device,
-    #         dtypes=[torch.uint8],
-    #         mode="train",
-    #     )
+    model: Model = memory_efficient_fusion(model)  # type: ignore[no-redef]
+    with torch.autocast(device_type=device.type):
+        summary(
+            model=model,
+            input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
+            device=device,
+            dtypes=[torch.uint8],
+            mode="train",
+        )
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
     optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
@@ -138,11 +141,9 @@ def train(cfg: DictConfig) -> None:
     # Create metrics
     writer = SummaryWriter()
     # TODO log hyperparameters to tensorboard run
-    # writer.add_hparams(hparam_dict=OmegaConf.to_container(cfg), metric_dict=None)
 
     # move things to the right device
 
-    print("device:", device)
     model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     loss_fn = loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
@@ -182,12 +183,12 @@ def train(cfg: DictConfig) -> None:
         verbose=True,
     )
 
-    print("num workers:", num_workers)
-    print("prefetch samples per worker:", train_dataloader.prefetch_factor)
+    logger.info(f"num workers: {num_workers}")
+    logger.info(f"prefetch samples per worker: {train_dataloader.prefetch_factor}")
 
     # begin the training loop
     for epoch in range(cfg.hparams.data.epochs):
-        print("Starting epoch", epoch)
+        logger.info(f"Starting epoch {epoch}...")
         model.train()
         for global_step, (img, label_id) in enumerate(train_dataloader):
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
@@ -218,7 +219,7 @@ def train(cfg: DictConfig) -> None:
 
         lr_scheduler.step()
 
-    print("Saving model...")
+    logger.info("Saving model...")
     torch.jit.script(model).save("model.torchscript")
 
 
