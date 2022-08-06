@@ -13,8 +13,6 @@ import numpy as np
 import numpy.typing as npt
 from openslide import OpenSlide
 import pandas as pd
-
-# from scipy.stats import mode
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomHorizontalFlip
@@ -174,7 +172,9 @@ class ROIDataset(Dataset):
         while i < 200:
             x_offset = np.random.randint(low=0, high=w - self.crop_size, dtype=outline.dtype)
             y_offset = np.random.randint(low=0, high=h - self.crop_size, dtype=outline.dtype)
-            crop = mask[y_offset : y_offset + self.crop_size, x_offset : x_offset + self.crop_size]
+            # fmt: off
+            crop = mask[y_offset:y_offset + self.crop_size, x_offset:x_offset + self.crop_size]
+            # fmt: on
             if crop.mean() >= self.min_intersect_pct:
                 return x_offset + ctr_min[0], y_offset + ctr_min[1]
             i += 1

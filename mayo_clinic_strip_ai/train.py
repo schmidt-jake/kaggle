@@ -9,7 +9,6 @@ from hydra.utils import call
 from hydra.utils import instantiate
 import numpy as np
 from omegaconf import DictConfig
-from omegaconf import OmegaConf
 import pandas as pd
 import torch
 import torch.backends.cudnn
@@ -216,11 +215,12 @@ def train(cfg: DictConfig) -> None:
 
             # TODO add scalars as dict
             writer.add_scalars(main_tag="train", tag_scalar_dict=m, global_step=global_step)
-            
+
         lr_scheduler.step()
 
     print("Saving model...")
     torch.jit.script(model).save("model.torchscript")
+
 
 if __name__ == "__main__":
     train()
