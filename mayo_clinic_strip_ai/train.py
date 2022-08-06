@@ -6,10 +6,12 @@ from functorch.compile import memory_efficient_fusion
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -118,6 +120,9 @@ def train(cfg: DictConfig) -> None:
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
 
     # Create metrics
+    writer = SummaryWriter()
+    # TODO log hyperparameters to tensorboard run
+    # writer.add_hparams(hparam_dict=OmegaConf.to_container(cfg), metric_dict=None)
 
     # move things to the right device
     device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
@@ -161,15 +166,17 @@ def train(cfg: DictConfig) -> None:
     for epoch in range(cfg.hyperparameters.data.epochs):
         print("Starting epoch", epoch)
         model.train()
-        for img, label_id in train_dataloader:
+        for global_step, (img, label_id) in enumerate(train_dataloader):
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
+
             train_metrics.update(logit=logit, target=label_id)
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
+            # TODO Histogram
             train_metrics.update_max_grad_norm(model)
             torch.nn.utils.clip_grad_norm_(
                 parameters=model.parameters(),
@@ -182,7 +189,8 @@ def train(cfg: DictConfig) -> None:
             m = train_metrics.compute()
             train_metrics.reset()
             m["loss"] = loss.item()
-            print(m)
+            # TODO add scalars as dict
+            writer.add_scalars(main_tag="train", tag_scalar_dict=m, global_step=global_step)
 
 
 if __name__ == "__main__":

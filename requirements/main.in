@@ -1,9 +1,12 @@
 functorch
 hydra-core
 kaggle
+omegaconf
 opencv-python
 openslide-python
 pandas
+scipy
 torch
 torchmetrics
 torchvision
+tensorboard
