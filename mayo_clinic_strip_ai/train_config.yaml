@@ -27,3 +27,4 @@ hparams:
   lr_scheduler:
     _target_: torch.optim.lr_scheduler.ConstantLR
     factor: 1.0
+random_seed: 42
