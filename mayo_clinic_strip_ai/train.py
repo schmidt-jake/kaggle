@@ -76,6 +76,8 @@ def train(cfg: DictConfig) -> None:
     # Let the pytorch backend seelct the fastest convolutional kernel
     torch.backends.cudnn.benchmark = True
 
+    device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
+
     # Load the training metadata, including image labels and ROI coordinates
     train_meta = pd.merge(
         left=pd.read_csv(cfg.roi_path),
@@ -111,17 +113,6 @@ def train(cfg: DictConfig) -> None:
         ),
     )
     model = memory_efficient_fusion(model)
-
-    # https://hydra.cc/docs/advanced/instantiate_objects/overview/
-    optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
-
-    # Create the loss function
-    loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
-
-    # move things to the right device
-    device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
-    print("device:", device)
-    model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     with torch.autocast(device_type=device.type):
         summary(
             model=model,
@@ -130,6 +121,17 @@ def train(cfg: DictConfig) -> None:
             dtypes=[torch.uint8],
             mode="train",
         )
+
+    # https://hydra.cc/docs/advanced/instantiate_objects/overview/
+    optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
+
+    # Create the loss function
+    loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
+
+    # move things to the right device
+
+    print("device:", device)
+    model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     loss_fn = loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
