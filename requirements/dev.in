@@ -3,6 +3,7 @@
 bandit
 black
 isort
+kaggle
 mypy
 pip-compile-multi
 pre-commit
