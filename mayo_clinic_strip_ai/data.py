@@ -209,14 +209,13 @@ class ROIDataset(Dataset):
             raise ValueError(f"Got {img.level_count} levels!")
         outline: npt.NDArray[np.int32] = np.load(
             os.path.join(self.outline_dir, row["image_id"], str(row["roi_num"]) + ".npy"),
-            mmap_mode="r",
             allow_pickle=False,
         )
 
         try:
             x, y = self.valid_random_crop(outline)
         except RuntimeError as e:
-            raise RuntimeError(f"{e}\n{row['image_id']}")
+            raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
         img = self._read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
 
         # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
