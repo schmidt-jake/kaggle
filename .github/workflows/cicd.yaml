@@ -26,7 +26,7 @@ jobs:
       - name: Install project dependencies
         run: pip-sync requirements/main.txt requirements/dev.txt
       - name: Security check with bandit
-        run: bandit -r .
+        run: bandit -x tests/ -r .
       - name: Check import sorting
         run: isort --settings-path=pyproject.toml --check-only .
       - name: Run flake8
