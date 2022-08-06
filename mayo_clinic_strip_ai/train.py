@@ -1,17 +1,18 @@
 from math import log
 from multiprocessing import cpu_count
 import os
+import random
 
 from functorch.compile import memory_efficient_fusion
 import hydra
 from hydra.utils import call
 from hydra.utils import instantiate
+import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
-from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -23,6 +24,8 @@ from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
 from mayo_clinic_strip_ai.model import Model
 from mayo_clinic_strip_ai.model import Normalizer
+
+# from torchinfo import summary
 
 
 def get_pos_weight(y: pd.Series) -> float:
@@ -73,6 +76,9 @@ def train(cfg: DictConfig) -> None:
     cfg : DictConfig
         The config object containing e.g. hyperparameter settings.
     """
+    random.seed(cfg.random_seed)
+    np.random.seed(cfg.random_seed)
+    torch.manual_seed(cfg.random_seed)
     # Let the pytorch backend seelct the fastest convolutional kernel
     torch.backends.cudnn.benchmark = True
 
@@ -151,6 +157,7 @@ def train(cfg: DictConfig) -> None:
         batch_sampler=StratifiedBatchSampler(  # type: ignore[arg-type]
             levels=train_meta[cfg.hparams.data.stratification_levels],
             batch_size=cfg.hparams.data.batch_size,
+            seed=cfg.random_seed,
         ),
         pin_memory=torch.cuda.is_available(),
         pin_memory_device=str(device) if torch.cuda.is_available() else "",

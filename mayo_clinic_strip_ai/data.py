@@ -170,12 +170,15 @@ class ROIDataset(Dataset):
         ctr_min = outline.min(axis=0)
         w, h = outline.max(axis=0) - ctr_min
         mask = cv2.fillPoly(img=np.zeros((w, h), dtype=np.uint8), pts=[outline - outline.min(axis=0)], color=1)
-        while True:
+        i = 0
+        while i < 200:
             x_offset = np.random.randint(low=0, high=w - self.crop_size, dtype=outline.dtype)
             y_offset = np.random.randint(low=0, high=h - self.crop_size, dtype=outline.dtype)
             crop = mask[y_offset : y_offset + self.crop_size, x_offset : x_offset + self.crop_size]
             if crop.mean() >= self.min_intersect_pct:
                 return x_offset + ctr_min[0], y_offset + ctr_min[1]
+            i += 1
+        raise RuntimeError("Couldn't find a good crop!")
 
     def __getitem__(self, index: int) -> Union[Tuple[torch.Tensor, int], torch.Tensor]:
         """
@@ -210,7 +213,10 @@ class ROIDataset(Dataset):
             allow_pickle=False,
         )
 
-        x, y = self.valid_random_crop(outline)
+        try:
+            x, y = self.valid_random_crop(outline)
+        except RuntimeError as e:
+            raise RuntimeError(f"{e}\n{row['image_id']}")
         img = self._read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
 
         # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
@@ -246,14 +252,14 @@ class StratifiedBatchSampler(object):
         cls_weights = len(y) / (y.nunique() * y.value_counts())
         return cls_weights.to_dict()
 
-    def __init__(self, levels: pd.DataFrame, batch_size: int) -> None:
+    def __init__(self, levels: pd.DataFrame, batch_size: int, seed: int) -> None:
         self.batch_size = batch_size
         self.p = np.ones(shape=len(levels), dtype=np.float32)
         for name, col in levels.iteritems():
             _col_cls_weight = self.get_class_weights(col)
             self.p *= col.map(_col_cls_weight.get).astype(np.float32).values
         self.p /= self.p.sum()
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng(seed)
         self.indices = np.arange(start=0, stop=len(self.p), dtype=np.int32)
 
     def __len__(self) -> int:
