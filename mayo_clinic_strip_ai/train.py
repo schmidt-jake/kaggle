@@ -15,7 +15,6 @@ import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -123,14 +122,6 @@ def train(cfg: DictConfig) -> None:
         ),
     )
     model: Model = memory_efficient_fusion(model)  # type: ignore[no-redef]
-    with torch.autocast(device_type=device.type):
-        summary(
-            model=model,
-            input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
-            device=device,
-            dtypes=[torch.uint8],
-            mode="train",
-        )
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
     optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
