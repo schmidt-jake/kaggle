@@ -4,7 +4,7 @@ roi_path: /kaggle/input/mayo-rois/train/ROIs.csv
 prefetch_batches: 8
 hparams:
   data:
-    batch_size: 16
+    batch_size: 64
     crop_size: 2048
     final_size: 256
     epochs: 10
@@ -12,6 +12,7 @@ hparams:
       - label
       - center_id
       - patient_id
+    min_intersect_pct: 0.99
   model:
     backbone:
       _target_: torchvision.models.densenet161

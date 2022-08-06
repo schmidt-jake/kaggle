@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 import torch.backends.cudnn
 from torch.utils.data import DataLoader
+from torchinfo import summary
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -123,6 +124,14 @@ def train(cfg: DictConfig) -> None:
     print("device:", device)
     model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     model = memory_efficient_fusion(model)
+    with torch.autocast(device_type=device.type):
+        summary(
+            model=model,
+            input_data=(cfg.hparams.data.batch_size, 3, cfg.data.final_size, cfg.data.final_size),
+            device=device,
+            dtypes=[torch.uint8],
+            mode="train",
+        )
     loss_fn = loss_fn.to(device=device, non_blocking=True)
     train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
@@ -134,6 +143,7 @@ def train(cfg: DictConfig) -> None:
         outline_dir=os.path.dirname(cfg.roi_path),
         crop_size=cfg.hparams.data.crop_size,
         final_size=cfg.hparams.data.final_size,
+        min_intersect_pct=cfg.hparams.data.min_intersect_pct,
     )
     num_workers = cpu_count()  # use all CPUs
     train_dataloader = DataLoader(
