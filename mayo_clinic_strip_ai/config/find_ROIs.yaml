@@ -1,0 +1,6 @@
+input_filepath: mayo_clinic_strip_ai/data/train.csv
+data_dir: mayo_clinic_strip_ai/data/train
+output_dir: mayo_clinic_strip_ai/data/ROIS_v2
+blur_ksize: 512
+saturation_thresh: 5
+min_outline_area: 1_000_000

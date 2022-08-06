@@ -66,7 +66,7 @@ def get_bias(y: pd.Series) -> float:
     return log(p / (1 - p))
 
 
-@hydra.main(config_path=".", config_name="train_config", version_base=None)
+@hydra.main(config_path="config", config_name="train", version_base=None)
 def train(cfg: DictConfig) -> None:
     """
     The entrypoint into the training job.

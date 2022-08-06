@@ -9,5 +9,8 @@ ROOT_DATA_DIR=mayo_clinic_strip_ai/data
 for dataset in train test
 do
     echo "Starting on $dataset..."
-    python -m mayo_clinic_strip_ai.find_ROIs $ROOT_DATA_DIR/$dataset/ $ROOT_DATA_DIR/$dataset.csv $ROOT_DATA_DIR/ROIs/$dataset
+    python mayo_clinic_strip_ai/find_ROIs.py \
+        input_filepath=$ROOT_DATA_DIR/$dataset.csv \
+        data_dir=$ROOT_DATA_DIR/$dataset/ \
+        output_dir=$ROOT_DATA_DIR/ROIs_v2/$dataset
 done
