@@ -127,7 +127,7 @@ def train(cfg: DictConfig) -> None:
     with torch.autocast(device_type=device.type):
         summary(
             model=model,
-            input_data=(cfg.hparams.data.batch_size, 3, cfg.data.final_size, cfg.data.final_size),
+            input_data=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.final_size, cfg.hparams.data.final_size),
             device=device,
             dtypes=[torch.uint8],
             mode="train",
