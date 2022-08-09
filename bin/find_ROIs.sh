@@ -9,8 +9,8 @@ ROOT_DATA_DIR=mayo_clinic_strip_ai/data
 for dataset in train test
 do
     echo "Starting on $dataset..."
+    # mprof run --interval=5 --output=$dataset.dat --multiprocess \
     python mayo_clinic_strip_ai/find_ROIs.py \
         input_filepath=$ROOT_DATA_DIR/$dataset.csv \
-        data_dir=$ROOT_DATA_DIR/$dataset/ \
-        output_dir=$ROOT_DATA_DIR/ROIs_v2/$dataset
+        data_dir=$ROOT_DATA_DIR/$dataset/
 done

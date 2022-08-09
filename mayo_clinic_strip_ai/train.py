@@ -20,7 +20,7 @@ from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
 from mayo_clinic_strip_ai.data import ROIDataset
 from mayo_clinic_strip_ai.data import StratifiedBatchSampler
-from mayo_clinic_strip_ai.metrics import TrainMetrics
+from mayo_clinic_strip_ai.metrics import Metrics
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
 from mayo_clinic_strip_ai.model import Loss
@@ -111,6 +111,12 @@ def train(cfg: DictConfig) -> None:
         inplace=True,
     )
 
+    # filter ROIs with extreme aspect ratios
+    train_meta.query("h / w > 1 / 12 and h / w < 12", inplace=True)
+
+    # filter blurry ROIs
+    train_meta.query("blur > 1.0", inplace=True)
+
     # Create the model
     backbone = instantiate(cfg.hparams.model.backbone)
     model = Model(
@@ -137,7 +143,7 @@ def train(cfg: DictConfig) -> None:
 
     model = model.to(device=device, memory_format=torch.channels_last, non_blocking=True)  # type: ignore[call-overload]
     loss_fn = loss_fn.to(device=device, non_blocking=True)
-    train_metrics = TrainMetrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
+    train_metrics = Metrics(acc_thresh=train_meta["label"].eq(POS_CLS).mean()).to(device=device, non_blocking=True)
 
     # Create dataset and dataloader
     train_dataset = ROIDataset(
@@ -188,11 +194,17 @@ def train(cfg: DictConfig) -> None:
                 logit: torch.Tensor = model(img)
                 loss: torch.Tensor = loss_fn(logit=logit, label=label_id)
 
+            writer.add_histogram(
+                tag="logit",
+                values=logit.detach(),
+                global_step=global_step,
+                bins="auto",
+            )
+
             train_metrics.update(logit=logit, target=label_id)
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
-            # TODO Histogram
-            train_metrics.update_max_grad_norm(model)
+
             call(
                 cfg.hparams.backward,
                 parameters=model.parameters(),
@@ -205,7 +217,6 @@ def train(cfg: DictConfig) -> None:
             train_metrics.reset()
             m["loss"] = loss.item()
 
-            # TODO add scalars as dict
             writer.add_scalars(main_tag="train", tag_scalar_dict=m, global_step=global_step)
 
         lr_scheduler.step()

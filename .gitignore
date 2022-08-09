@@ -134,3 +134,5 @@ dmypy.json
 *log.txt
 !*dataset-metadata.json
 outputs
+*.jpeg
+.DS_Store

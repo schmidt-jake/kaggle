@@ -1,0 +1,4 @@
+input_filepath: mayo_clinic_strip_ai/data/train.csv
+data_dir: mayo_clinic_strip_ai/data/train
+num_processes: 7
+max_size: 1024

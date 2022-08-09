@@ -43,50 +43,8 @@
             "type": "number"
           },
           {
-            "name": "thresh",
-            "description": "The Otsu threshold computed for the image mask",
-            "type": "number"
-          }
-        ]
-      }
-    },
-    {
-      "name": "test_rois",
-      "path": "test/ROIs.csv",
-      "schema": {
-        "fields": [
-          {
-            "name": "image_id",
-            "type": "string"
-          },
-          {
-            "name": "roi_num",
-            "description": "The index of the ROI within the image",
-            "type": "number"
-          },
-          {
-            "name": "x",
-            "description": "The leftmost pixel coordinate of the ROI",
-            "type": "number"
-          },
-          {
-            "name": "y",
-            "description": "The topmost pixel coordinate of the ROI",
-            "type": "number"
-          },
-          {
-            "name": "w",
-            "description": "The pixel width of the ROI",
-            "type": "number"
-          },
-          {
-            "name": "h",
-            "description": "The pixel height of the ROI",
-            "type": "number"
-          },
-          {
-            "name": "thresh",
-            "description": "The Otsu threshold computed for the image mask",
+            "name": "blur",
+            "description": "The variance of the Laplacian",
             "type": "number"
           }
         ]

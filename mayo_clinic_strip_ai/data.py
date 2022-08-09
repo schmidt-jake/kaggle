@@ -5,6 +5,7 @@ that can be used with a torch.utils.data.DataLoader in a training and/or inferen
 Docs:
 https://pytorch.org/docs/stable/data.html
 """
+from ctypes import c_uint32
 import os
 from typing import Dict, Generator, Tuple, Union
 
@@ -12,6 +13,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 from openslide import OpenSlide
+from openslide.lowlevel import _read_region
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -78,7 +80,15 @@ class ROIDataset(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
-    def _read_region(self, img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
+    @staticmethod
+    def _read_region(slide: OpenSlide, x: int, y: int, w: int, h: int) -> npt.NDArray[np.uint8]:
+        # adapted from openslide.lowlevel.read_region so that it returns anumpy array
+        # instead of a PIL.Image
+        buf = (w * h * c_uint32)()
+        _read_region(slide._osr, buf, x, y, 0, w, h)
+        return np.frombuffer(buf, dtype=np.uint8)  # type: ignore[call-overload]
+
+    def read_region(self, img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
         """
         Reads a region of an image into memory and returns a 3-channel RGB image,
         channels last.
@@ -95,12 +105,7 @@ class ROIDataset(Dataset):
         npt.NDArray[np.uint8]
             An RGB channels-last array of pixels.
         """
-        x = img.read_region(
-            location=(crop.x, crop.y),
-            size=(crop.w, crop.h),
-            level=0,
-        )
-        x = np.array(x)
+        x = self._read_region(slide=img, x=crop.x, y=crop.y, w=crop.w, h=crop.h)
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
         x = cv2.resize(x, dsize=(self.final_size, self.final_size), interpolation=cv2.INTER_CUBIC)
         # x, H, E = normalize_staining(x)
@@ -126,7 +131,7 @@ class ROIDataset(Dataset):
         """
         x_offset = np.random.randint(low=0, high=roi.w - self.crop_size)
         y_offset = np.random.randint(low=0, high=roi.h - self.crop_size)
-        return self._read_region(
+        return self.read_region(
             img=img,
             crop=Rect(
                 x=roi.x + x_offset,
@@ -216,7 +221,7 @@ class ROIDataset(Dataset):
             x, y = self.valid_random_crop(outline)
         except RuntimeError as e:
             raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
-        img = self._read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
+        img = self.read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
 
         # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
         # if self.training:
