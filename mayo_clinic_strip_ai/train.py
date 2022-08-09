@@ -180,6 +180,7 @@ def train(cfg: DictConfig) -> None:
         verbose=True,
     )
 
+    logger.info(f"training on {len(train_dataset)} samples")
     logger.info(f"num workers: {num_workers}")
     logger.info(f"prefetch samples per worker: {train_dataloader.prefetch_factor}")
 
