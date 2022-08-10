@@ -17,6 +17,7 @@ import torch.backends.cudnn
 from torch.jit.frontend import NotSupportedError
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 
 from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
@@ -197,7 +198,7 @@ def train(cfg: DictConfig) -> None:
         for batch_idx, (img, label_id) in enumerate(train_dataloader):
             global_step = (epoch_idx + 1) * (batch_idx + 1)
             if batch_idx == 0:
-                writer.add_images(tag="input_batch", img_tensor=img, global_step=global_step)
+                writer.add_image(tag="input_batch", img_tensor=make_grid(img), global_step=global_step)
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):

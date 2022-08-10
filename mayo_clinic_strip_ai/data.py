@@ -5,7 +5,7 @@ that can be used with a torch.utils.data.DataLoader in a training and/or inferen
 Docs:
 https://pytorch.org/docs/stable/data.html
 """
-from ctypes import c_uint32
+
 import os
 from typing import Dict, Generator, Tuple, Union
 
@@ -13,7 +13,6 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 from openslide import OpenSlide
-from openslide.lowlevel import _read_region
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -21,8 +20,7 @@ from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
-
-# from mayo_clinic_strip_ai.stain import normalize_staining
+from mayo_clinic_strip_ai.stain import normalize_staining
 
 POS_CLS = "LAA"
 NEG_CLS = "CE"
@@ -80,14 +78,6 @@ class ROIDataset(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
-    @staticmethod
-    def _read_region(slide: OpenSlide, x: int, y: int, w: int, h: int) -> npt.NDArray[np.uint8]:
-        # adapted from openslide.lowlevel.read_region so that it returns anumpy array
-        # instead of a PIL.Image
-        buf = (w * h * c_uint32)()
-        _read_region(slide._osr, buf, x, y, 0, w, h)
-        return np.frombuffer(buf, dtype=np.uint8)  # type: ignore[call-overload]
-
     def read_region(self, img: OpenSlide, crop: Rect) -> npt.NDArray[np.uint8]:
         """
         Reads a region of an image into memory and returns a 3-channel RGB image,
@@ -105,10 +95,10 @@ class ROIDataset(Dataset):
         npt.NDArray[np.uint8]
             An RGB channels-last array of pixels.
         """
-        x = self._read_region(slide=img, x=crop.x, y=crop.y, w=crop.w, h=crop.h)
+        x = np.array(img.read_region(location=(crop.x, crop.y), level=0, size=(crop.w, crop.h)))
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
         x = cv2.resize(x, dsize=(self.final_size, self.final_size), interpolation=cv2.INTER_CUBIC)
-        # x, H, E = normalize_staining(x)
+        x, H, E = normalize_staining(x)
         x = cv2.bitwise_not(x)
         return x
 
@@ -140,34 +130,6 @@ class ROIDataset(Dataset):
                 h=self.crop_size,
             ),
         )
-
-    # def valid_random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
-    #     """
-    #     Generates a RGB, channels-last array of shape (self.crop_size, self.crop_size, 3)
-    #     from a random area of the provided ROI coordinates, trying to ensure that the crop doesn't
-    #     have too much dead space / background.
-
-    #     Parameters
-    #     ----------
-    #     img : OpenSlide
-    #         The image object to read
-    #     roi : Rect
-    #         The ROI coordinates from which to generate a random crop
-
-    #     Returns
-    #     -------
-    #     npt.NDArray[np.uint8]
-    #         The RGB, channels-last (HWC) pixel array.
-    #     """
-    #     x = self._random_crop(img=img, roi=roi)
-    #     i = 0
-    #     while mode(x, axis=None, keepdims=False).mode < 20.0:
-    #         if i > 10:
-    #             print("Couldn't find a good crop!")
-    #             break
-    #         x = self._random_crop(img=img, roi=roi)
-    #         i += 1
-    #     return x
 
     def valid_random_crop(self, outline: npt.NDArray[np.int32]) -> Tuple[int, int]:
         ctr_min = outline.min(axis=0)
@@ -222,22 +184,6 @@ class ROIDataset(Dataset):
         except RuntimeError as e:
             raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
         img = self.read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
-
-        # roi = Rect.from_mask(outline)  # type: ignore[arg-type]
-        # if self.training:
-        #     img = self.valid_random_crop(img=img, roi=roi)
-        # else:
-        #     x_offset = (roi.w - self.crop_size) // 2
-        #     y_offset = (roi.h - self.crop_size) // 2
-        #     img = self._read_region(
-        #         img=img,
-        #         crop=Rect(
-        #             x=roi.x + x_offset,
-        #             y=roi.y + y_offset,
-        #             w=self.crop_size,
-        #             h=self.crop_size,
-        #         ),
-        #     )
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
         if self.training:
