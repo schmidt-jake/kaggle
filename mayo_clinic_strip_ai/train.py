@@ -191,10 +191,13 @@ def train(cfg: DictConfig) -> None:
     logger.info(f"prefetch samples per worker: {train_dataloader.prefetch_factor}")
 
     # begin the training loop
-    for epoch in range(cfg.hparams.data.epochs):
-        logger.info(f"Starting epoch {epoch}...")
+    for epoch_idx in range(cfg.hparams.data.epochs):
+        logger.info(f"Starting epoch {epoch_idx}...")
         model.train()
-        for global_step, (img, label_id) in enumerate(train_dataloader):
+        for batch_idx, (img, label_id) in enumerate(train_dataloader):
+            global_step = (epoch_idx + 1) * (batch_idx + 1)
+            if batch_idx == 0:
+                writer.add_images(tag="input_batch", img_tensor=img, global_step=global_step)
             img = img.to(device=device, memory_format=torch.channels_last, non_blocking=True)
             label_id = label_id.to(device=device, non_blocking=True)
             with torch.autocast(device_type=img.device.type):
