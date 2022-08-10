@@ -15,12 +15,12 @@ hparams:
     min_intersect_pct: 0.5
   model:
     backbone:
-      _target_: torchvision.models.densenet161
-      weights: DenseNet161_Weights.DEFAULT
+      _target_: torchvision.models.densenet201
+      weights: null
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 0.002
-    weight_decay: 0.001
+    lr: 0.001
+    weight_decay: 0.0
   backward:
     _target_: torch.nn.utils.clip_grad_norm_
     max_norm: 5.0

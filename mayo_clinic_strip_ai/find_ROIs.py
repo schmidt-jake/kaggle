@@ -234,7 +234,6 @@ def process_file(image_id: str, cfg: DictConfig, output_dir: Path) -> List[Dict[
         for roi_num, contour in enumerate(contours):
             np.save(pth / str(roi_num), contour * cfg.downscale_factor, allow_pickle=False)
             roi = Rect.from_mask(contour)
-            blur = compute_blur(img=roi.crop(img=img))
             out_dicts.append(
                 {
                     "image_id": image_id,
@@ -243,7 +242,8 @@ def process_file(image_id: str, cfg: DictConfig, output_dir: Path) -> List[Dict[
                     "y": roi.y,
                     "w": roi.w,
                     "h": roi.h,
-                    "blur": blur,
+                    "blur": compute_blur(img=roi.crop(img=img)),
+                    "area": cv2.contourArea(contour),
                 }
             )
 

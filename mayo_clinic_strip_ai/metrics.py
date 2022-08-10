@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 import torch
 from torchmetrics import MetricCollection
@@ -35,5 +35,7 @@ class Metrics(torch.nn.Module):
         self.metrics.reset()
 
 
-def get_grad_norms(model: torch.nn.Module) -> List[torch.Tensor]:
-    return [p.grad.detach().data.norm(2) for p in model.parameters() if p.grad is not None and p.requires_grad]
+def get_grad_norms(model: torch.nn.Module) -> torch.Tensor:
+    return torch.stack(
+        [p.grad.detach().data.norm(2) for p in model.parameters() if p.grad is not None and p.requires_grad]
+    )

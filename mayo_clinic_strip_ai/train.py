@@ -7,12 +7,14 @@ import random
 from functorch.compile import memory_efficient_fusion
 import hydra
 from hydra.utils import call
+from hydra.utils import HydraConfig
 from hydra.utils import instantiate
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
 import torch
 import torch.backends.cudnn
+from torch.jit.frontend import NotSupportedError
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -20,6 +22,7 @@ from mayo_clinic_strip_ai.data import NEG_CLS
 from mayo_clinic_strip_ai.data import POS_CLS
 from mayo_clinic_strip_ai.data import ROIDataset
 from mayo_clinic_strip_ai.data import StratifiedBatchSampler
+from mayo_clinic_strip_ai.metrics import get_grad_norms
 from mayo_clinic_strip_ai.metrics import Metrics
 from mayo_clinic_strip_ai.model import Classifier
 from mayo_clinic_strip_ai.model import FeatureExtractor
@@ -117,6 +120,8 @@ def train(cfg: DictConfig) -> None:
     # filter blurry ROIs
     train_meta.query("blur > 1.0", inplace=True)
 
+    logger.info(f"Labels: {train_meta['label'].value_counts()}")
+
     # Create the model
     backbone = instantiate(cfg.hparams.model.backbone)
     model = Model(
@@ -136,7 +141,8 @@ def train(cfg: DictConfig) -> None:
     loss_fn = Loss(pos_weight=get_pos_weight(train_meta["label"]))
 
     # Create metrics
-    writer = SummaryWriter()
+    hc = HydraConfig.get()
+    writer = SummaryWriter(log_dir=hc.run.dir)
     # TODO log hyperparameters to tensorboard run
 
     # move things to the right device
@@ -206,6 +212,12 @@ def train(cfg: DictConfig) -> None:
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
 
+            writer.add_histogram(
+                tag="grad_norms",
+                values=get_grad_norms(model),
+                global_step=global_step,
+            )
+
             call(
                 cfg.hparams.backward,
                 parameters=model.parameters(),
@@ -223,7 +235,11 @@ def train(cfg: DictConfig) -> None:
         lr_scheduler.step()
 
     logger.info("Saving model...")
-    torch.jit.script(model).save("model.torchscript")
+    try:
+        torch.jit.script(model).save(os.path.join(hc.run.dir, "model.torchscript"))
+    except NotSupportedError as e:
+        logger.warning(f"Failed converting to torchscript:\n{e}")
+        torch.save(model.state_dict(), os.path.join(hc.run.dir, "state_dict.pickle"))
 
 
 if __name__ == "__main__":
