@@ -1,0 +1,7 @@
+-r main.in
+
+functorch
+hydra-core
+omegaconf
+torchmetrics
+tensorboard

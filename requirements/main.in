@@ -1,10 +1,5 @@
-functorch
-hydra-core
-omegaconf
 opencv-python
 openslide-python
 pandas
 torch
-torchmetrics
 torchvision
-tensorboard

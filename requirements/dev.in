@@ -1,4 +1,4 @@
--r eda.in
+-r train.in
 
 bandit
 black
@@ -10,3 +10,4 @@ pip-compile-multi
 pre-commit
 pyproject-flake8
 pytest
+typeguard
