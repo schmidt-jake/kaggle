@@ -20,12 +20,10 @@ def test_normalizer():
     assert y.max().item() <= 1.0
 
 
-@pytest.mark.parametrize("backbone", ["densenet161", "resnet18"])
-@pytest.mark.parametrize("mixed_precision", [True, False])
-def test_feature_extractor(backbone: str, mixed_precision: bool):
+@pytest.mark.parametrize("backbone", ["densenet121"])
+def test_feature_extractor(backbone: str):
     fe = model.FeatureExtractor(backbone=getattr(models, backbone)())
     fe.train()
     x = torch.testing.make_tensor((2, 3, 512, 512), dtype=torch.float32, device="cpu")
-    with torch.autocast(device_type=x.device.type, enabled=mixed_precision):
-        y: torch.Tensor = fe(x)
+    y: torch.Tensor = fe(x)
     assert y.shape[0] == x.shape[0]

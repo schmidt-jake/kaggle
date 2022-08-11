@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import cv2
@@ -22,18 +21,37 @@ def tif_img_path(tmp_path: Path) -> Path:
     return img_path
 
 
+@pytest.fixture
+def outline_path(tmp_path: Path) -> Path:
+    arr = np.random.randint(
+        low=0,
+        high=30,
+        dtype=np.int32,
+        size=(10, 10),
+    )
+    np.save(tmp_path / "0", arr, allow_pickle=False)
+    return tmp_path / "0.npy"
+
+
+@pytest.mark.skip("Requires dataset")
 @pytest.mark.parametrize("training", [True, False])
-def test_roidataset(tif_img_path: Path, training: bool):
-    metadata = pd.DataFrame([{"image_id": "img", "label": "LAA", "x": 0, "y": 0, "h": 512, "w": 512}])
-    dataset = data.ROIDataset(training=training, metadata=metadata, tif_dir=os.path.dirname(tif_img_path))
-    for i in range(len(dataset)):
-        print(dataset[i])
+def test_roidataset(training: bool):
+    rois = pd.read_csv("mayo_clinic_strip_ai/data/ROIs/train/ROIs.csv")
+    dataset = data.ROIDataset(
+        training=training,
+        metadata=rois,
+        tif_dir="mayo_clinic_strip_ai/data/train",
+        outline_dir="mayo_clinic_strip_ai/data/ROIs/train",
+        crop_size=512,
+        final_size=256,
+        min_intersect_pct=0.5,
+    )
+    x = dataset[0]
+    assert x.shape == (3, 256, 256)  # type: ignore[union-attr]
 
 
 def test_stratified_batch_sampler():
-    rois = pd.read_csv("mayo_clinic_strip_ai/data/ROIs/train/ROIs.csv")
-    meta = pd.read_csv("mayo_clinic_strip_ai/data/train.csv")
-    levels = rois.merge(meta, on="image_id", how="inner", validate="m:1")
-    batch_sampler = data.StratifiedBatchSampler(levels=levels[["label"]], batch_size=10)
+    levels = pd.DataFrame({"label": np.random.choice(["a", "b"], size=101)})
+    batch_sampler = data.StratifiedBatchSampler(levels=levels[["label"]], batch_size=10, seed=0)
     for batch in batch_sampler:
         assert len(batch) == batch_sampler.batch_size

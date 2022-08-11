@@ -46,8 +46,8 @@ repos:
         require_serial: true
         # Print the number of files as sanity-check
         verbose: true
-        # args:
-        # - -x=tests/
+        args:
+          - -x=tests/
       - id: isort
         name: isort
         entry: isort
