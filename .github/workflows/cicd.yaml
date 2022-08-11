@@ -24,7 +24,7 @@ jobs:
       - name: Verify Lockfiles
         run: pip-compile-multi verify --directory=requirements
       - name: Install project dependencies
-        run: pip-sync requirements/main.txt requirements/dev.txt
+        run: pip-sync requirements/*.txt
       - name: Security check with bandit
         run: bandit -x tests/ -r .
       - name: Check import sorting
