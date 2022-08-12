@@ -19,13 +19,15 @@ jobs:
           python-version: 3.9
       - name: Install build tools
         run: |
-          apt-get update && apt-get install -y --no-install-recommends openslide-tools
           pip install -U pip setuptools wheel
           pip install pip-tools pip-compile-multi
       - name: Verify Lockfiles
         run: pip-compile-multi verify --directory=requirements
       - name: Install project dependencies
-        run: pip-sync requirements/*.txt
+        # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#administrative-privileges
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends openslide-tools
+          pip-sync requirements/*.txt
       - name: Security check with bandit
         run: bandit -x tests/ -r .
       - name: Check import sorting
