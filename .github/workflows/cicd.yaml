@@ -19,6 +19,7 @@ jobs:
           python-version: 3.9
       - name: Install build tools
         run: |
+          apt-get update && apt-get install -y --no-install-recommends openslide-tools
           pip install -U pip setuptools wheel
           pip install pip-tools pip-compile-multi
       - name: Verify Lockfiles
