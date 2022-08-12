@@ -1,9 +1,13 @@
--r main.in
+-r train.in
 
 bandit
 black
+flake8<5 # due to bug in pyproject-flake8
 isort
+kaggle
 mypy
 pip-compile-multi
 pre-commit
 pyproject-flake8
+pytest
+typeguard

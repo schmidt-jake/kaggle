@@ -16,13 +16,13 @@ python_version = 3.9
 ignore_missing_imports = true
 implicit_reexport = true
 show_error_codes = true
-strict = true
-exclude = ".venv"
+strict = false
+exclude = "venv"
 
 [tool.black]
 line-length = 120
 target-version = ["py39"]
 
 [tool.pytest]
-addopts = ["-s"]
+addopts = ["-s", "--typeguard-packages=mayo_clinic_strip_ai,tests"]
 log_cli = true

@@ -127,3 +127,12 @@ dmypy.json
 
 # VSCode config
 .vscode
+
+*.csv
+*.tif
+*.npy
+*log.txt
+!*dataset-metadata.json
+outputs
+*.jpeg
+.DS_Store

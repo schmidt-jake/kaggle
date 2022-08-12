@@ -1,0 +1,7 @@
+input_filepath: mayo_clinic_strip_ai/data/qc.csv
+data_dir: mayo_clinic_strip_ai/data/train
+blur_ksize: 256
+min_outline_area: 500_000
+saturation_thresh: 1.5
+downscale_factor: 2
+num_processes: 7

@@ -46,8 +46,8 @@ repos:
         require_serial: true
         # Print the number of files as sanity-check
         verbose: true
-        # args:
-        # - -x=tests/
+        args:
+          - -x=tests/
       - id: isort
         name: isort
         entry: isort
@@ -77,16 +77,6 @@ repos:
         entry: mypy
         args:
           - --config-file=pyproject.toml
-        language: system
-        types: [python]
-        require_serial: true
-        verbose: true
-      - id: pip-compile-multi-verify
-        name: Verify Lockfiles
-        entry: pip-compile-multi
-        args:
-          - verify
-          - --directory=requirements
         language: system
         types: [python]
         require_serial: true
