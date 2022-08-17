@@ -36,7 +36,6 @@ def make_thumbnail(image_id: str, cfg: DictConfig, output_dir: Path) -> None:
     filepath = os.path.join(cfg.data_dir, image_id + ".tif")
     img = cv2.imread(filepath, cv2.IMREAD_COLOR)
     img = thumbnail(img, max_size=cfg.max_size)
-    cv2.cvtColor(img, cv2.COLOR_BGR2RGB, dst=img)
     cv2.imwrite(img=img, filename=(output_dir / "thumbnails" / (image_id + ".jpeg")).as_posix())
 
 
@@ -52,7 +51,7 @@ def main(cfg: DictConfig):
 
     meta = pd.read_csv(cfg.input_filepath, dtype={"image_id": "string"}, usecols=["image_id"])
     with Pool(processes=cfg.num_processes) as pool:
-        pool.map_async(
+        pool.map(
             func=partial(make_thumbnail, cfg=cfg, output_dir=run_dir),
             iterable=tqdm(meta["image_id"].tolist()),
             chunksize=1,
