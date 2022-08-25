@@ -61,10 +61,7 @@ class Classifier(torch.nn.Sequential):
             The dimension of the input to the classifier.
         """
         logit = torch.nn.Linear(in_features=in_features, out_features=1)
-        logit.bias = torch.nn.Parameter(
-            torch.tensor(initial_logit_bias, requires_grad=True),
-            requires_grad=True,
-        )
+        torch.nn.init.constant_(logit.bias, initial_logit_bias)
         super().__init__(torch.nn.BatchNorm1d(in_features), logit)
 
 

@@ -23,7 +23,7 @@ functorch==0.2.1
     # via
     #   -c requirements/dev.txt
     #   -r requirements/train.in
-google-auth==2.10.0
+google-auth==2.11.0
     # via
     #   -c requirements/dev.txt
     #   google-auth-oauthlib
@@ -56,7 +56,7 @@ oauthlib==3.2.0
     # via
     #   -c requirements/dev.txt
     #   requests-oauthlib
-omegaconf==2.2.2
+omegaconf==2.2.3
     # via
     #   -c requirements/dev.txt
     #   -r requirements/train.in

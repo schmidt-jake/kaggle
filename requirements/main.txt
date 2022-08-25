@@ -9,7 +9,7 @@ certifi==2022.6.15
     # via
     #   -c requirements/dev.txt
     #   requests
-charset-normalizer==2.1.0
+charset-normalizer==2.1.1
     # via
     #   -c requirements/dev.txt
     #   requests
@@ -17,7 +17,7 @@ idna==3.3
     # via
     #   -c requirements/dev.txt
     #   requests
-numpy==1.23.1
+numpy==1.23.2
     # via
     #   -c requirements/dev.txt
     #   opencv-python
@@ -44,7 +44,7 @@ python-dateutil==2.8.2
     # via
     #   -c requirements/dev.txt
     #   pandas
-pytz==2022.1
+pytz==2022.2.1
     # via
     #   -c requirements/dev.txt
     #   pandas
@@ -70,7 +70,7 @@ typing-extensions==4.3.0
     #   -c requirements/dev.txt
     #   torch
     #   torchvision
-urllib3==1.26.11
+urllib3==1.26.12
     # via
     #   -c requirements/dev.txt
     #   requests

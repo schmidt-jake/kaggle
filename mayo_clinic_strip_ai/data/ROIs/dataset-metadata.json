@@ -43,8 +43,23 @@
             "type": "number"
           },
           {
-            "name": "blur",
-            "description": "The variance of the Laplacian",
+            "name": "area",
+            "description": "The ROI area in pixels",
+            "type": "number"
+          },
+          {
+            "name": "I_0_B",
+            "description": "Background intensity of the B channel",
+            "type": "number"
+          },
+          {
+            "name": "I_0_G",
+            "description": "Background intensity of the G channel",
+            "type": "number"
+          },
+          {
+            "name": "I_0_R",
+            "description": "Background intensity of the R channel",
             "type": "number"
           }
         ]

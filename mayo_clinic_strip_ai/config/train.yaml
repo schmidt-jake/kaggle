@@ -5,14 +5,13 @@ prefetch_batches: 8
 hparams:
   data:
     batch_size: 64
-    crop_size: 1024
-    final_size: 256
+    crop_size: 512
     epochs: 10
     stratification_levels:
       - label
       - center_id
       - patient_id
-    min_intersect_pct: 0.5
+    min_intersect_pct: 0.80
   model:
     backbone:
       _target_: torchvision.models.densenet201

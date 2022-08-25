@@ -118,9 +118,6 @@ def train(cfg: DictConfig) -> None:
     # filter ROIs with extreme aspect ratios
     train_meta.query("h / w > 1 / 12 and h / w < 12", inplace=True)
 
-    # filter blurry ROIs
-    train_meta.query("blur > 1.0", inplace=True)
-
     logger.info(f"Labels: {train_meta['label'].value_counts()}")
 
     # Create the model
@@ -159,7 +156,6 @@ def train(cfg: DictConfig) -> None:
         tif_dir=cfg.tif_dir,
         outline_dir=os.path.dirname(cfg.roi_path),
         crop_size=cfg.hparams.data.crop_size,
-        final_size=cfg.hparams.data.final_size,
         min_intersect_pct=cfg.hparams.data.min_intersect_pct,
     )
     num_workers = cpu_count()  # use all CPUs
