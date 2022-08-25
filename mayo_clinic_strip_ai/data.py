@@ -174,15 +174,15 @@ class ROIDataset(Dataset):
             allow_pickle=False,
         )
 
-        # try:
-        #     x, y = self.valid_random_crop(outline)
-        # except RuntimeError as e:
-        #     raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
-        # img = self.read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
+        try:
+            x, y = self.valid_random_crop(outline)
+        except RuntimeError as e:
+            raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
+        img = self.read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
 
-        img = self.read_region(img=img, crop=Rect.from_mask(outline))
+        # img = self.read_region(img=img, crop=Rect.from_mask(outline))
         img = normalize_background(img, I_0=np.array([row["I_0_R"], row["I_0_G"], row["I_0_B"]], dtype=img.dtype))
-        # cv2.bitwise_not(src=img, dst=img)
+        cv2.bitwise_not(src=img, dst=img)
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
         if self.training:

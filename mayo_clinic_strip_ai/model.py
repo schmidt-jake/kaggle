@@ -80,6 +80,11 @@ class Model(torch.nn.Sequential):
             A binary classifier.
         """
         super().__init__(normalizer, feature_extractor, classifier)
+        for name, m in self.named_modules():
+            if "logit" not in name and hasattr(m, "bias"):
+                torch.nn.init.constant_(m.bias, 0.0)
+            if isinstance(m, torch.nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
 
 
 class Loss(torch.nn.Module):
