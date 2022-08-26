@@ -3,5 +3,6 @@
 functorch
 hydra-core
 omegaconf
+torchinfo
 torchmetrics
 tensorboard
