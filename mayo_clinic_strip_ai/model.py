@@ -81,7 +81,7 @@ class Model(torch.nn.Sequential):
         """
         super().__init__(normalizer, feature_extractor, classifier)
         for name, m in self.named_modules():
-            if "logit" not in name and hasattr(m, "bias"):
+            if "logit" not in name and hasattr(m, "bias") and m.bias is not None:
                 torch.nn.init.constant_(m.bias, 0.0)
             if isinstance(m, torch.nn.Conv2d):
                 torch.nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
