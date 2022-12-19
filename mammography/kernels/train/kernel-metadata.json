@@ -1,0 +1,17 @@
+{
+  "id": "jakeschmidt/mammography-train",
+  "id_no": 33408378,
+  "title": "mammography-train",
+  "code_file": "train.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [
+    "competitions/rsna-breast-cancer-detection"
+  ]
+}

@@ -1,0 +1,13 @@
+hydra-core
+omegaconf
+opencv-python-headless
+pandas
+pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+pytorch-lightning
+tensorboardX
+torch
+torchdata
+torchmetrics
+torchvision

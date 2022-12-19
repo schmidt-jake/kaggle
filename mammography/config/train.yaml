@@ -1,0 +1,48 @@
+trainer:
+  _target_: pytorch_lightning.Trainer
+  callbacks:
+    - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      mode: max
+      every_n_epochs: 1
+      save_top_k: 1
+      verbose: true
+      monitor: val_accuracy_epoch
+    - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: value
+  log_every_n_steps: 1
+  num_sanity_val_steps: 0
+  benchmark: true
+  max_epochs: 100
+  precision: 16
+  default_root_dir: ???
+  # logger:
+  #   - _target_: pytorch_lightning.loggers.TensorBoardLogger
+  #     save_dir: ???
+datamodule:
+  _target_: mammography.src.train.DataModule
+  root_dir: ???
+  augmentation:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: torchvision.transforms.RandomCrop
+        size: 512
+model:
+  _target_: mammography.src.train.Model
+  optimizer_config:
+    _target_: torch.optim.SGD
+    lr: 1e-2
+    _partial_: true
+  feature_extractor:
+    _target_: mammography.src.train.FeatureExtractor
+    backbone:
+      _target_: torchvision.models.densenet161
+    layer_name: flatten
+  classifier:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: torch.nn.Linear
+        in_features: 2208
+        out_features: 1
+  loss:
+    _target_: torch.nn.BCEWithLogitsLoss
