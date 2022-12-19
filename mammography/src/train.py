@@ -37,9 +37,10 @@ class FeatureExtractor(torch.nn.Module):
 
 
 class DataframeDataPipe(Dataset):
-    def __init__(self, df: pd.DataFrame) -> None:
+    def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential) -> None:
         super().__init__()
         self.df = df
+        self.augmentation = augmentation
 
     def __len__(self) -> int:
         return len(self.df)
@@ -47,7 +48,7 @@ class DataframeDataPipe(Dataset):
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.df.iloc[index]
         d = row.to_dict()
-        d["pixels"] = dicom2tensor(row["filepath"])
+        d["pixels"] = self.augmentation(dicom2tensor(row["filepath"]))
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
         return d
 
@@ -99,13 +100,13 @@ class DataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> DataLoader:
-        pipe = DataframeDataPipe(self.df)  # .to_iter_datapipe()
+        pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
             batch_size=8,
             shuffle=True,
             pin_memory=True,
-            num_workers=0,
+            num_workers=2,
         )
         # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
@@ -119,11 +120,17 @@ class DataModule(pl.LightningDataModule):
         # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
     def val_dataloader(self) -> DataLoader:
-        self.augmentation.eval()
-        return self.train_dataloader()
+        pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
+        return DataLoader(
+            dataset=pipe,
+            batch_size=8,
+            shuffle=False,
+            pin_memory=True,
+            num_workers=2,
+        )
 
     def test_dataloader(self) -> DataLoader:
-        return super().test_dataloader()
+        return self.val_dataloader()
 
 
 class Model(pl.LightningModule):
