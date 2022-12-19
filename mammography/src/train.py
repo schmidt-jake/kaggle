@@ -14,8 +14,10 @@ from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
 from pydicom import dcmread
-from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
-from torchdata.datapipes.map import MapDataPipe
+from torch.utils.data import DataLoader, Dataset
+
+# from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
+# from torchdata.datapipes.map import MapDataPipe
 from torchmetrics import MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryF1Score
 from torchvision.models.feature_extraction import create_feature_extractor
@@ -34,7 +36,7 @@ class FeatureExtractor(torch.nn.Module):
         return self.feature_extractor(x)[self.layer_name]
 
 
-class DataframeDataPipe(MapDataPipe):
+class DataframeDataPipe(Dataset):
     def __init__(self, df: pd.DataFrame) -> None:
         super().__init__()
         self.df = df
@@ -44,7 +46,10 @@ class DataframeDataPipe(MapDataPipe):
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.df.iloc[index]
-        return row.to_dict()
+        d = row.to_dict()
+        d["pixels"] = dicom2tensor(row["filepath"])
+        d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
+        return d
 
 
 def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torch.nn.Module:
@@ -93,24 +98,31 @@ class DataModule(pl.LightningDataModule):
             + ".dcm"
         )
 
-    def train_dataloader(self) -> DataLoader2:
-        pipe = DataframeDataPipe(self.df).to_iter_datapipe()
-        pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
+    def train_dataloader(self) -> DataLoader:
+        pipe = DataframeDataPipe(self.df)  # .to_iter_datapipe()
+        return DataLoader(
+            dataset=pipe,
+            batch_size=8,
+            shuffle=True,
+            pin_memory=True,
+            num_workers=0,
+        )
+        # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
-        pipe = pipe.shuffle(buffer_size=1)
-        self.augmentation.train()
-        pipe = pipe.map(self.augmentation, input_col="pixels", output_col="pixels")
-        pipe = pipe.map(partial(select_dict_keys, keys=["pixels", "cancer"]))
-        pipe = pipe.batch(8)
-        pipe = pipe.collate()
+        # pipe = pipe.shuffle(buffer_size=1)
+        # self.augmentation.train()
+        # pipe = pipe.map(self.augmentation, input_col="pixels", output_col="pixels")
+        # pipe = pipe.map(partial(select_dict_keys, keys=["pixels", "cancer"]))
+        # pipe = pipe.batch(8)
+        # pipe = pipe.collate()
         # pipe = pipe.prefetch(buffer_size=1)
-        return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
+        # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
-    def val_dataloader(self) -> DataLoader2:
+    def val_dataloader(self) -> DataLoader:
         self.augmentation.eval()
         return self.train_dataloader()
 
-    def test_dataloader(self) -> DataLoader2:
+    def test_dataloader(self) -> DataLoader:
         return super().test_dataloader()
 
 

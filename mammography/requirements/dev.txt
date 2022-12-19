@@ -67,7 +67,7 @@ identify==2.5.10
     # via pre-commit
 iniconfig==1.1.1
     # via pytest
-ipykernel==6.19.2
+ipykernel==6.19.3
     # via -r mammography/requirements/dev.in
 ipython==8.7.0
     # via ipykernel
@@ -196,7 +196,7 @@ tornado==6.2
     # via
     #   ipykernel
     #   jupyter-client
-traitlets==5.7.1
+traitlets==5.8.0
     # via
     #   comm
     #   ipykernel
