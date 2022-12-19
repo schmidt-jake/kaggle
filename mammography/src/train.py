@@ -79,10 +79,11 @@ def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, A
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, root_dir: str, augmentation: torch.nn.Sequential) -> None:
+    def __init__(self, root_dir: str, augmentation: torch.nn.Sequential, batch_size: int) -> None:
         super().__init__()
         self.root_dir = root_dir
         self.augmentation = augmentation
+        self.batch_size = batch_size
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
@@ -103,7 +104,7 @@ class DataModule(pl.LightningDataModule):
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
-            batch_size=8,
+            batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
             num_workers=0,
@@ -123,7 +124,7 @@ class DataModule(pl.LightningDataModule):
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
-            batch_size=8,
+            batch_size=self.batch_size,
             shuffle=False,
             pin_memory=True,
             num_workers=0,
