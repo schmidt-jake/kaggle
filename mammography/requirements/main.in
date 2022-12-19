@@ -1,4 +1,5 @@
 hydra-core
+lightning-lite
 omegaconf
 opencv-python-headless
 pandas

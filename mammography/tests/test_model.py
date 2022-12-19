@@ -11,7 +11,7 @@ from mammography.src.train import train
 
 
 def data_patch(filepath: str) -> torch.Tensor:
-    return torch.testing.make_tensor(1, 512, 512, dtype=torch.int16, low=0, device=torch.device("cpu"))
+    return torch.testing.make_tensor(shape=(1, 512, 512), dtype=torch.int16, low=0, device=torch.device("cpu"))
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
@@ -36,7 +36,10 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 def test_datamodule(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("mammography.src.train.dicom2tensor", data_patch)
     with initialize(version_base=None, config_path="../config"):
-        cfg = compose(config_name="train")
+        cfg = compose(
+            config_name="train",
+            overrides=["datamodule.root_dir=mammography/data"],
+        )
         datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
         datamodule.setup(stage="fit")
         dataloader = datamodule.train_dataloader()
