@@ -17,8 +17,8 @@ trainer:
   precision: 16
   default_root_dir: ???
   logger:
-    - _target_: pytorch_lightning.loggers.TensorBoardLogger
-      save_dir: ${trainer.default_root_dir}
+    - _target_: pytorch_lightning.loggers.WandbLogger
+      project: rsna-breast-cancer-detection
 datamodule:
   _target_: mammography.src.train.DataModule
   root_dir: ???
