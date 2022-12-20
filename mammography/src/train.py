@@ -47,6 +47,7 @@ class DataframeDataPipe(Dataset):
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.df.iloc[index]
+        logger.debug(f"Loading image {row['image_id']=}")
         d = row.to_dict()
         d["pixels"] = self.augmentation(dicom2tensor(row["filepath"]))
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
@@ -151,7 +152,7 @@ class Model(pl.LightningModule):
         self.optimizer_config = optimizer_config
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.precision < 32:
+        if self.precision == 16:
             x = x.half()
         else:
             x = x.float()
