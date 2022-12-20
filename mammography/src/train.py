@@ -47,7 +47,7 @@ class DataframeDataPipe(Dataset):
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.df.iloc[index]
-        logger.debug(f"Loading image {row['image_id']=}")
+        logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         d["pixels"] = self.augmentation(dicom2tensor(row["filepath"]))
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
