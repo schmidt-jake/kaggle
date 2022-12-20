@@ -108,7 +108,7 @@ class DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
-            num_workers=0,
+            num_workers=2,
         )
         # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
@@ -128,7 +128,7 @@ class DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             pin_memory=True,
-            num_workers=0,
+            num_workers=2,
         )
 
     def test_dataloader(self) -> DataLoader:
