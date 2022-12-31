@@ -28,6 +28,7 @@ datamodule:
     _args_:
       - _target_: torchvision.transforms.RandomCrop
         size: 512
+        pad_if_needed: true
 model:
   _target_: mammography.src.train.Model
   optimizer_config:

@@ -36,8 +36,8 @@ class ProbabilisticBinaryF1Score(Metric):
         # https://www.kaggle.com/code/sohier/probabilistic-f-score/notebook
         super().__init__()
         self.add_state("y_true_count", default=torch.tensor(0, dtype=torch.int64), dist_reduce_fx="sum")
-        self.add_state("ctp", default=torch.tensor(0, dtype=torch.float32), dist_reduce_fx="sum")
-        self.add_state("cfp", default=torch.tensor(0, dtype=torch.float32), dist_reduce_fx="sum")
+        self.add_state("ctp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
+        self.add_state("cfp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
         self.y_true_count += target.numel()
