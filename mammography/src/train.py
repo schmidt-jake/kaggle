@@ -1,5 +1,6 @@
 import logging
 import os
+from functools import cache
 from inspect import signature
 from typing import Any, Callable, Dict, List
 
@@ -76,12 +77,17 @@ class DataframeDataPipe(Dataset):
     def __len__(self) -> int:
         return len(self.df)
 
+    @cache
+    @staticmethod
+    def _cached_read(filepath: str) -> npt.NDArray[np.uint16]:
+        return dicom2numpy(filepath)
+
     def __getitem__(self, index: int) -> Dict[str, Any]:
         cv2.setNumThreads(0)
         row = self.df.iloc[index]
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
-        arr = dicom2numpy(row["filepath"])
+        arr = self._cached_read(row["filepath"])
         arr = crop(arr)
         pixels = torch.from_numpy(arr.astype(np.int32)).unsqueeze(dim=0)
         d["pixels"] = self.augmentation(pixels)
