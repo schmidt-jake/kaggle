@@ -22,7 +22,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy
 from torchvision.models.feature_extraction import create_feature_extractor
-from wandb import config
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +227,6 @@ class Model(pl.LightningModule):
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
 def train(cfg: DictConfig) -> None:
-    config.update(cfg)
     seed_everything(seed=42, workers=True)
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
