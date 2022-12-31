@@ -238,8 +238,8 @@ def train(cfg: DictConfig) -> None:
     model: pl.LightningModule = instantiate(cfg.model)
     for logger in trainer.loggers:
         logger.log_hyperparams(cfg)  # type: ignore[arg-type]
-        if isinstance(logger, WandbLogger):
-            logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
+        # if isinstance(logger, WandbLogger):
+        #     logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
 
 
