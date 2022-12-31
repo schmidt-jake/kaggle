@@ -40,13 +40,13 @@ class ProbabilisticBinaryF1Score(Metric):
         self.add_state("cfp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        self.y_true_count += target.numel()
+        self.y_true_count += target.numel()  # type: ignore[operator]
         self.ctp += preds[target].sum()
         self.cfp += preds[target.logical_not()].sum()
 
     def compute(self) -> torch.Tensor:
-        c_precision = self.ctp / (self.ctp + self.cfp)
-        c_recall = self.ctp / self.y_true_count
+        c_precision = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
+        c_recall = self.ctp / self.y_true_count  # type: ignore[operator]
         result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
         return result
 
@@ -55,7 +55,7 @@ class FeatureExtractor(torch.nn.Module):
     def __init__(self, backbone: torch.nn.Module, layer_name: str) -> None:
         super().__init__()
         self.layer_name = layer_name
-        backbone.features[0] = replace_layer(backbone.features[0], in_channels=1)
+        backbone.features[0] = replace_layer(backbone.features[0], in_channels=1)  # type: ignore[assignment,index,operator]
         self.feature_extractor = create_feature_extractor(model=backbone, return_nodes=[self.layer_name])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -209,14 +209,14 @@ class Model(pl.LightningModule):
         # loss = self.loss(input=prediction, target=batch["cancer"].float())
         metrics = self.train_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False, sync_dist=True)  # type: ignore[arg-type]
-        return {"loss": metrics["pf1/train"]}
+        return {"loss": -metrics["pf1/train"]}
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction = self(batch["pixels"])
         # loss = self.loss(input=prediction, target=batch["cancer"].float())
         metrics = self.val_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.val_metrics, on_step=True, on_epoch=True, sync_dist=True)  # type: ignore[arg-type]
-        return {"loss": metrics["pf1/val"]}
+        return {"loss": -metrics["pf1/val"]}
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
         return self(batch["pixels"])
