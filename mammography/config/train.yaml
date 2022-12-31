@@ -20,6 +20,7 @@ trainer:
   logger:
     - _target_: pytorch_lightning.loggers.WandbLogger
       project: rsna-breast-cancer-detection
+      config: mammography/config/train.yaml
 datamodule:
   _target_: mammography.src.train.DataModule
   root_dir: ???
