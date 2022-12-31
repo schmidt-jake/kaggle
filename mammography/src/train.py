@@ -230,7 +230,9 @@ def train(cfg: DictConfig) -> None:
     seed_everything(seed=42, workers=True)
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
+    datamodule.save_hyperparameters(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
+    model.save_hyperparameters(cfg.model)
     for logger in trainer.loggers:
         if isinstance(logger, WandbLogger):
             logger.watch(model, log="all", log_freq=1)
