@@ -144,6 +144,7 @@ class DataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> DataLoader:
+        logger.debug(f"Train dataloader {self.batch_size=}")
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
@@ -164,6 +165,7 @@ class DataModule(pl.LightningDataModule):
         # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
     def val_dataloader(self) -> DataLoader:
+        logger.debug(f"Validation dataloader {self.batch_size=}")
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
@@ -182,19 +184,15 @@ class Model(pl.LightningModule):
         self,
         feature_extractor: FeatureExtractor,
         classifier: torch.nn.Sequential,
-        loss: torch.nn.modules.loss._Loss,
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
         super().__init__()
         self.feature_extractor = feature_extractor
         self.classifier = classifier
-        self.train_metrics = MetricCollection(
-            {"pf1": ProbabilisticBinaryF1Score(), "accuracy": BinaryAccuracy()}, postfix="/train"
-        )
+        self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
         self.val_metrics = MetricCollection(
             {"pf1": ProbabilisticBinaryF1Score(), "accuracy": BinaryAccuracy()}, postfix="/val"
         )
-        self.loss = loss
         self.optimizer_config = optimizer_config
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -206,17 +204,14 @@ class Model(pl.LightningModule):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction = self(batch["pixels"])
-        # loss = self.loss(input=prediction, target=batch["cancer"].float())
         metrics = self.train_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False, sync_dist=True)  # type: ignore[arg-type]
         return {"loss": -metrics["pf1/train"]}
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
         prediction = self(batch["pixels"])
-        # loss = self.loss(input=prediction, target=batch["cancer"].float())
-        metrics = self.val_metrics(preds=prediction, target=batch["cancer"])
-        self.log_dict(self.val_metrics, on_step=True, on_epoch=True, sync_dist=True)  # type: ignore[arg-type]
-        return {"loss": -metrics["pf1/val"]}
+        self.val_metrics(preds=prediction, target=batch["cancer"])
+        self.log_dict(self.val_metrics, on_step=False, on_epoch=True, sync_dist=True)  # type: ignore[arg-type]
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
         return self(batch["pixels"])

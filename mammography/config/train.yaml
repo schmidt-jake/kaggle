@@ -48,5 +48,3 @@ model:
         in_features: 2208
         out_features: 1
       - _target_: torch.nn.Sigmoid
-  loss:
-    _target_: torch.nn.BCEWithLogitsLoss
