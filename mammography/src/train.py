@@ -144,7 +144,6 @@ class DataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> DataLoader:
-        logger.debug(f"Train dataloader {self.batch_size=}")
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
@@ -165,7 +164,6 @@ class DataModule(pl.LightningDataModule):
         # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
     def val_dataloader(self) -> DataLoader:
-        logger.debug(f"Validation dataloader {self.batch_size=}")
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
