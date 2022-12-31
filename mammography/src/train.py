@@ -267,7 +267,6 @@ def train(cfg: DictConfig) -> None:
         # if isinstance(logger, WandbLogger):
         #     logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
-    datamodule._cache_dir
 
 
 if __name__ == "__main__":
