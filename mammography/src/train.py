@@ -233,9 +233,8 @@ def train(cfg: DictConfig) -> None:
     model: pl.LightningModule = instantiate(cfg.model)
     for logger in trainer.loggers:
         if isinstance(logger, WandbLogger):
-            logger.watch(model, log="all")
+            logger.watch(model, log="all", log_freq=1)
     trainer.fit(model=model, datamodule=datamodule)
-    # trainer.test()
 
 
 if __name__ == "__main__":
