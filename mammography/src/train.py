@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, Dataset
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import BinaryAccuracy
+from torchmetrics.classification import BinaryAccuracy, BinaryAUROC, BinaryROC
 from torchvision.models.feature_extraction import create_feature_extractor
 
 logger = logging.getLogger(__name__)
@@ -31,10 +31,10 @@ class ProbabilisticBinaryF1Score(Metric):
     higher_is_better = True
     full_state_update = False
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
         # https://torchmetrics.readthedocs.io/en/stable/pages/implement.html
         # https://www.kaggle.com/code/sohier/probabilistic-f-score/notebook
-        super().__init__()
+        super().__init__(**kwargs)
         self.add_state("y_true_count", default=torch.tensor(0, dtype=torch.int64), dist_reduce_fx="sum")
         self.add_state("ctp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
         self.add_state("cfp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
@@ -191,7 +191,13 @@ class Model(pl.LightningModule):
         self.classifier = classifier
         self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
         self.val_metrics = MetricCollection(
-            {"pf1": ProbabilisticBinaryF1Score(), "accuracy": BinaryAccuracy()}, postfix="/val"
+            {
+                "pf1": ProbabilisticBinaryF1Score(),
+                "accuracy": BinaryAccuracy(validate_args=False),
+                # "roc": BinaryROC(validate_args=False),
+                "auroc": BinaryAUROC(validate_args=False),
+            },
+            postfix="/val",
         )
         self.optimizer_config = optimizer_config
 
