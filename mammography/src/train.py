@@ -65,7 +65,8 @@ class FeatureExtractor(torch.nn.Module):
             x = x.half()
         else:
             x = x.float()
-        x /= 65534  # 2 ** 16 - 1
+        # x /= 65534.0  # 2 ** 16 - 1
+        x /= 255.0  # 2 ** 8 - 1
         return self.feature_extractor(x)[self.layer_name]
 
 
@@ -101,7 +102,7 @@ class DataframeDataPipe(Dataset):
         d = row.to_dict()
         # arr = self._cached_read(filepath=row["filepath"], image_id=row["image_id"])
         arr = self._read(filepath=row["filepath"])
-        pixels = torch.from_numpy(arr.astype(np.uint8)).unsqueeze(dim=0)
+        pixels = torch.from_numpy(arr).unsqueeze(dim=0)
         d["pixels"] = self.augmentation(pixels)
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
         return d
@@ -114,12 +115,12 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
     return type(layer_to_replace)(**layer_params)
 
 
-def crop(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint16]:
+def crop(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint8]:
     img_uint8 = cv2.convertScaleAbs(img)
     contours = cv2.findContours(img_uint8, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
     max_contour = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(max_contour)
-    return img[y : y + h, x : x + w]
+    return img_uint8[y : y + h, x : x + w]
 
 
 def dicom2numpy(filepath: str) -> npt.NDArray[np.uint16]:
