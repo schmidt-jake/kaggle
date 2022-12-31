@@ -122,11 +122,15 @@ def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, A
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, root_dir: str, augmentation: torch.nn.Sequential, batch_size: int) -> None:
+    def __init__(
+        self, root_dir: str, augmentation: torch.nn.Sequential, batch_size: int, prefetch_batches: int
+    ) -> None:
         super().__init__()
         self.root_dir = root_dir
         self.augmentation = augmentation
         self.batch_size = batch_size
+        self.num_workers = torch.multiprocessing.cpu_count()
+        self.prefetch = max(prefetch_batches * self.batch_size // self.num_workers, 2)
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
@@ -150,7 +154,8 @@ class DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
-            num_workers=torch.multiprocessing.cpu_count(),
+            num_workers=self.num_workers,
+            prefetch_factor=self.prefetch,
         )
         # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
@@ -170,7 +175,8 @@ class DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             pin_memory=True,
-            num_workers=torch.multiprocessing.cpu_count(),
+            num_workers=self.num_workers,
+            prefetch_factor=self.prefetch,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -233,7 +239,7 @@ def train(cfg: DictConfig) -> None:
     for logger in trainer.loggers:
         logger.log_hyperparams(cfg)  # type: ignore[arg-type]
         if isinstance(logger, WandbLogger):
-            logger.watch(model, log="all", log_freq=1)
+            logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
 
 
