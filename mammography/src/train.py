@@ -1,7 +1,8 @@
 import logging
 import os
-from functools import cache
 from inspect import signature
+
+# from tempfile import TemporaryDirectory
 from typing import Any, Callable, Dict, List
 
 import cv2
@@ -73,23 +74,34 @@ class DataframeDataPipe(Dataset):
         super().__init__()
         self.df = df
         self.augmentation = augmentation
+        # self._cache_dir = TemporaryDirectory()
 
     def __len__(self) -> int:
         return len(self.df)
 
-    @cache
+    def _cached_read(self, filepath: str, image_id: str) -> npt.NDArray[np.uint16]:
+        save_path = os.path.join(self._cache_dir.name, image_id, "pixels.npy")
+        if os.path.exists(save_path):
+            arr = np.load(save_path)
+        else:
+            arr = self._read(filepath)
+            np.save(save_path, arr)
+        return arr
+
     @staticmethod
-    def _cached_read(filepath: str) -> npt.NDArray[np.uint16]:
-        return dicom2numpy(filepath)
+    def _read(filepath: str) -> npt.NDArray[np.uint16]:
+        arr = dicom2numpy(filepath)
+        arr = crop(arr)
+        return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         cv2.setNumThreads(0)
         row = self.df.iloc[index]
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
-        arr = self._cached_read(row["filepath"])
-        arr = crop(arr)
-        pixels = torch.from_numpy(arr.astype(np.int32)).unsqueeze(dim=0)
+        # arr = self._cached_read(filepath=row["filepath"], image_id=row["image_id"])
+        arr = self._read(filepath=row["filepath"])
+        pixels = torch.from_numpy(arr.astype(np.uint8)).unsqueeze(dim=0)
         d["pixels"] = self.augmentation(pixels)
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
         return d
@@ -155,6 +167,7 @@ class DataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
+        # self._train_cache = pipe._cache_dir
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
@@ -176,6 +189,7 @@ class DataModule(pl.LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
+        # self._val_cache = pipe._cache_dir
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
@@ -184,6 +198,11 @@ class DataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch,
         )
+
+    # def teardown(self, stage: str) -> None:
+    #     self._train_cache.cleanup()
+    #     self._val_cache.cleanup()
+    #     super().teardown(stage)
 
     def test_dataloader(self) -> DataLoader:
         return self.val_dataloader()
@@ -240,13 +259,14 @@ class Model(pl.LightningModule):
 def train(cfg: DictConfig) -> None:
     seed_everything(seed=42, workers=True)
     trainer: pl.Trainer = instantiate(cfg.trainer)
-    datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
+    datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
     for logger in trainer.loggers:
         logger.log_hyperparams(cfg)  # type: ignore[arg-type]
         # if isinstance(logger, WandbLogger):
         #     logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
+    datamodule._cache_dir
 
 
 if __name__ == "__main__":
