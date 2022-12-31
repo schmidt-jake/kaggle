@@ -6,7 +6,7 @@ trainer:
       every_n_epochs: 1
       save_top_k: 1
       verbose: true
-      monitor: val_accuracy_epoch
+      monitor: accuracy/val_epoch
     - _target_: pytorch_lightning.callbacks.TQDMProgressBar
   gradient_clip_val: 1.0
   gradient_clip_algorithm: value
@@ -45,5 +45,6 @@ model:
       - _target_: torch.nn.Linear
         in_features: 2208
         out_features: 1
+      - _target_: torch.nn.Sigmoid
   loss:
     _target_: torch.nn.BCEWithLogitsLoss

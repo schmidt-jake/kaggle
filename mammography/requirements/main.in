@@ -10,5 +10,5 @@ pytorch-lightning
 torch==1.11.0 # pineed to kaggle version
 # torchdata
 torchmetrics
-torchvision==0.12.0 # pineed to kaggle version
+torchvision==0.12.0 # pinned to kaggle version
 wandb

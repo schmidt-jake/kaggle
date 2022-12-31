@@ -1,21 +1,22 @@
 from pathlib import Path
 
+import numpy as np
+import numpy.typing as npt
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from pytest import MonkeyPatch
 
-from mammography.kernels.submit.submit import submit
-from mammography.src.train import train
+from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
-def data_patch(filepath: str) -> torch.Tensor:
-    return torch.testing.make_tensor(shape=(1, 512, 512), dtype=torch.int16, low=0, device=torch.device("cpu"))
+def data_patch(filepath: str) -> npt.NDArray[np.uint16]:
+    return np.random.randint(size=(1, 512, 512), low=0, high=2**16 - 1, dtype=np.uint16)
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr("mammography.src.train.dicom2tensor", data_patch)
+    # monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
@@ -24,13 +25,12 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "+trainer.limit_val_batches=1",
                 "trainer.max_epochs=1",
                 "~trainer.precision",
-                # f"trainer.default_root_dir={tmp_path}",
-                "trainer.default_root_dir=mammography",
+                f"trainer.default_root_dir={tmp_path}",
                 "datamodule.root_dir=mammography/data",
+                "trainer.logger=null",
             ],
         )
         train(cfg)
-        submit(cfg)
 
 
 def test_datamodule(monkeypatch: MonkeyPatch) -> None:
@@ -48,3 +48,26 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
             assert "cancer" in batch.keys()
             assert batch["pixels"].shape == (8, 1, 512, 512)
             break
+
+
+def test_pf1_metric() -> None:
+    metric = ProbabilisticBinaryF1Score()
+    for _ in range(5):
+        metric.update(
+            preds=torch.testing.make_tensor(
+                shape=(8, 1),
+                device="cpu",
+                dtype=torch.float32,
+                low=0.0,
+                high=1.0,
+            ),
+            target=torch.testing.make_tensor(
+                shape=(8, 1),
+                device="cpu",
+                dtype=torch.int64,
+                low=0,
+                high=1,
+            ),
+        )
+    result = metric.compute()
+    assert not result.isnan()
