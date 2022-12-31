@@ -23,7 +23,7 @@ trainer:
 datamodule:
   _target_: mammography.src.train.DataModule
   root_dir: ???
-  batch_size: 24
+  batch_size: 22
   prefetch_batches: 1
   augmentation:
     _target_: torch.nn.Sequential
