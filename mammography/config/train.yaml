@@ -41,7 +41,7 @@ model:
     _target_: mammography.src.train.FeatureExtractor
     backbone:
       _target_: torchvision.models.densenet161
-      memory_efficient: true
+      memory_efficient: false
       pretrained: false
     layer_name: flatten
   classifier:
