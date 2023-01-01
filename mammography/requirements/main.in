@@ -1,11 +1,11 @@
+dicomsdl
 hydra-core
 lightning-lite
 omegaconf
 opencv-python-headless
 pandas
-pydicom
-pylibjpeg
-pylibjpeg-libjpeg
+# pylibjpeg
+# pylibjpeg-libjpeg
 pytorch-lightning
 torch==1.11.0 # pineed to kaggle version
 # torchdata
