@@ -115,7 +115,7 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
     return type(layer_to_replace)(**layer_params)
 
 
-def crop(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint8]:
+def crop(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
     thresh, mask = cv2.threshold(img, thresh=0, maxval=1, type=cv2.THRESH_OTSU)
     logger.debug(f"thresh={thresh}")
     contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
@@ -264,6 +264,11 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return self.optimizer_config(params=self.parameters())
+
+    def optimizer_zero_grad(
+        self, epoch: int, batch_idx: int, optimizer: torch.optim.Optimizer, optimizer_idx: int
+    ) -> None:
+        optimizer.zero_grad(set_to_none=True)
 
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
