@@ -13,10 +13,10 @@ import numpy.typing as npt
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
-from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader, Dataset
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
@@ -210,9 +210,9 @@ class DataModule(pl.LightningDataModule):
             prefetch_factor=self.prefetch,
         )
 
-    def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
-        batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
-        return batch
+    # def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
+    #     batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
+    #     return batch
 
     # def teardown(self, stage: str) -> None:
     #     self._train_cache.cleanup()
@@ -231,8 +231,8 @@ class Model(pl.LightningModule):
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
         super().__init__()
-        self.feature_extractor = torch.jit.script(feature_extractor)
-        self.classifier = torch.jit.script(classifier)
+        self.feature_extractor = memory_efficient_fusion(feature_extractor)
+        self.classifier = memory_efficient_fusion(classifier)
         self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
         self.val_metrics = MetricCollection(
             {
@@ -281,7 +281,7 @@ def train(cfg: DictConfig) -> None:
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
-    model = model.to(memory_format=torch.channels_last)
+    # model = model.to(memory_format=torch.channels_last)
     for logger in trainer.loggers:
         logger.log_hyperparams(cfg)  # type: ignore[arg-type]
         # if isinstance(logger, WandbLogger):

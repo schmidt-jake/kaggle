@@ -1,14 +1,21 @@
 dicomsdl
+# functorch<1.13.0
+functorch==0.1.1  # compatible with torch 1.11
 hydra-core
 lightning-lite
 omegaconf
 opencv-python-headless
 pandas
-# pylibjpeg
-# pylibjpeg-libjpeg
 pytorch-lightning
-torch==1.11.0 # pineed to kaggle version
-# torchdata
+torch==1.11.0  # kaggle version
+# torch==1.12.1; sys_platform != "linux"
+# torch==1.12.1+cu116; sys_platform == "linux"
+# torchdata<0.5
+torchdata==0.3  # compatible with torch 1.11
 torchmetrics
-torchvision==0.12.0 # pinned to kaggle version
+torchvision==0.12.0  # kaggle version
+# torchvision==0.13.1; sys_platform != "linux"
+# torchvision==0.13.1+cu116; sys_platform == "linux"
 wandb
+
+# --extra-index-url https://download.pytorch.org/whl/cu116
