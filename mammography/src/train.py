@@ -270,6 +270,10 @@ class Model(pl.LightningModule):
     ) -> None:
         optimizer.zero_grad(set_to_none=True)
 
+    def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
+        batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
+        return batch
+
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
 def train(cfg: DictConfig) -> None:
@@ -277,6 +281,7 @@ def train(cfg: DictConfig) -> None:
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
+    model = model.to(memory_format=torch.channels_last)
     for logger in trainer.loggers:
         logger.log_hyperparams(cfg)  # type: ignore[arg-type]
         # if isinstance(logger, WandbLogger):
