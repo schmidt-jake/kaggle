@@ -210,6 +210,10 @@ class DataModule(pl.LightningDataModule):
             prefetch_factor=self.prefetch,
         )
 
+    def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
+        batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
+        return batch
+
     # def teardown(self, stage: str) -> None:
     #     self._train_cache.cleanup()
     #     self._val_cache.cleanup()
@@ -227,8 +231,8 @@ class Model(pl.LightningModule):
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
         super().__init__()
-        self.feature_extractor = feature_extractor
-        self.classifier = classifier
+        self.feature_extractor = torch.jit.script(feature_extractor)
+        self.classifier = torch.jit.script(classifier)
         self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
         self.val_metrics = MetricCollection(
             {
@@ -269,10 +273,6 @@ class Model(pl.LightningModule):
         self, epoch: int, batch_idx: int, optimizer: torch.optim.Optimizer, optimizer_idx: int
     ) -> None:
         optimizer.zero_grad(set_to_none=True)
-
-    def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
-        batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
-        return batch
 
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
