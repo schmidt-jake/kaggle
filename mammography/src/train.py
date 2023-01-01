@@ -13,10 +13,12 @@ import numpy.typing as npt
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from functorch.compile import memory_efficient_fusion
+
+# from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
+from torch.utils.checkpoint import checkpoint_sequential
 from torch.utils.data import DataLoader, Dataset
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
@@ -231,8 +233,8 @@ class Model(pl.LightningModule):
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
         super().__init__()
-        self.feature_extractor = memory_efficient_fusion(feature_extractor)
-        self.classifier = memory_efficient_fusion(classifier)
+        self.feature_extractor = feature_extractor
+        self.classifier = classifier
         self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
         self.val_metrics = MetricCollection(
             {
@@ -250,7 +252,14 @@ class Model(pl.LightningModule):
             x = x.half()
         else:
             x = x.float()
-        return self.classifier(self.feature_extractor(x)).squeeze(dim=1)
+        features: torch.Tensor = checkpoint_sequential(
+            self.feature_extractor, segments=5, input=x, preserve_rng_state=False
+        )
+        predictions: torch.Tensor = self.classifier(features)
+        # predictions: torch.Tensor = checkpoint_sequential(
+        #     self.classifier, segments=2, input=features, preserve_rng_state=False
+        # )
+        return predictions.squeeze(dim=1)
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction = self(batch["pixels"])
