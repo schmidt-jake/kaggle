@@ -117,7 +117,7 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
 
 def crop(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint8]:
     thresh, mask = cv2.threshold(img, thresh=0, maxval=1, type=cv2.THRESH_OTSU)
-    logger.debug(f"{thresh=}")
+    logger.debug(f"thresh={thresh}")
     contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
     max_contour = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(max_contour)
