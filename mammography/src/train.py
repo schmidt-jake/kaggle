@@ -222,10 +222,6 @@ class DataModule(pl.LightningDataModule):
             prefetch_factor=self.prefetch,
         )
 
-    def on_before_batch_transfer(self, batch: Dict[str, torch.Tensor], dataloader_idx: int) -> Dict[str, torch.Tensor]:
-        batch["pixels"] = batch["pixels"].to(memory_format=torch.channels_last)
-        return batch
-
     def predict_dataloader(self) -> DataLoader:
         return self.val_dataloader()
 
@@ -338,7 +334,6 @@ def train(cfg: DictConfig) -> None:
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
-    model = model.to(memory_format=torch.channels_last)
     wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
 
