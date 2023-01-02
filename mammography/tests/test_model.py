@@ -16,7 +16,8 @@ def data_patch(filepath: str) -> npt.NDArray[np.uint16]:
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    # monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
+    monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
+    monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
@@ -26,19 +27,28 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "trainer.max_epochs=1",
                 "~trainer.precision",
                 f"trainer.default_root_dir={tmp_path}",
-                "datamodule.root_dir=mammography/data/raw",
+                "datamodule.image_dir=mammography/data/uint8_crops/png",
+                "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+                "datamodule.batch_size=2",
                 "trainer.logger=null",
+                "datamodule.prefetch_batches=0",
             ],
         )
         train(cfg)
 
 
 def test_datamodule(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr("mammography.src.train.dicom2tensor", data_patch)
+    monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
+    monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
-            overrides=["datamodule.root_dir=mammography/data/raw"],
+            overrides=[
+                "datamodule.image_dir=mammography/data/uint8_crops/png",
+                "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+                "datamodule.batch_size=2",
+                "datamodule.prefetch_batches=0",
+            ],
         )
         datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
         datamodule.setup(stage="fit")
@@ -46,7 +56,7 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
         for batch in dataloader:
             assert "pixels" in batch.keys()
             assert "cancer" in batch.keys()
-            assert batch["pixels"].shape == (8, 1, 512, 512)
+            assert batch["pixels"].shape == (2, 1, 512, 512)
             break
 
 

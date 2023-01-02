@@ -1,8 +1,5 @@
 import logging
-import os
 from inspect import signature
-
-# from tempfile import TemporaryDirectory
 from typing import Any, Callable, Dict, List
 
 import cv2
@@ -51,10 +48,8 @@ class ProbabilisticBinaryF1Score(Metric):
     def compute(self) -> torch.Tensor:
         c_precision: torch.Tensor = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
         c_recall: torch.Tensor = self.ctp / self.y_true_count  # type: ignore[operator]
-        if (c_precision > 0.0).item() and (c_recall > 0.0).item():
-            result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
-        else:
-            result = torch.tensor(0.0, dtype=torch.float32)
+        result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
+        result.nan_to_num_()
         return result
 
 
@@ -80,19 +75,9 @@ class DataframeDataPipe(Dataset):
         super().__init__()
         self.df = df
         self.augmentation = augmentation
-        # self._cache_dir = TemporaryDirectory()
 
     def __len__(self) -> int:
         return len(self.df)
-
-    def _cached_read(self, filepath: str, image_id: str) -> npt.NDArray[np.uint16]:
-        save_path = os.path.join(self._cache_dir.name, image_id, "pixels.npy")
-        if os.path.exists(save_path):
-            arr = np.load(save_path)
-        else:
-            arr = self._read(filepath)
-            np.save(save_path, arr)
-        return arr
 
     @staticmethod
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
@@ -111,7 +96,6 @@ class DataframeDataPipe(Dataset):
         row = self.df.iloc[index]
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
-        # arr = self._cached_read(filepath=row["filepath"], image_id=row["image_id"])
         arr = self._read(filepath=row["filepath"])
         pixels = torch.from_numpy(arr).unsqueeze(dim=0)
         d["pixels"] = self.augmentation(pixels)
@@ -177,7 +161,7 @@ class DataModule(pl.LightningDataModule):
         self.augmentation = augmentation
         self.batch_size = batch_size
         self.num_workers = torch.multiprocessing.cpu_count()
-        self.prefetch = max(prefetch_batches * self.batch_size // self.num_workers, 2)
+        self.prefetch = max(prefetch_batches * self.batch_size // max(self.num_workers, 1), 2)
 
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
@@ -197,7 +181,6 @@ class DataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
-        # self._train_cache = pipe._cache_dir
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
@@ -219,7 +202,6 @@ class DataModule(pl.LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
-        # self._val_cache = pipe._cache_dir
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
