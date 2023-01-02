@@ -7,7 +7,7 @@ trainer:
       every_n_epochs: 1
       save_top_k: 1
       verbose: true
-      monitor: pf1/val
+      monitor: metrics/pf1/val
     - _target_: pytorch_lightning.callbacks.TQDMProgressBar
   gradient_clip_val: 1.0
   gradient_clip_algorithm: value

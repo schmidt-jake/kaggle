@@ -190,7 +190,6 @@ class DataModule(pl.LightningDataModule):
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
-            shuffle=True,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch,
@@ -284,7 +283,7 @@ class Model(pl.LightningModule):
         prediction = self(batch["pixels"])
         metrics = self.train_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False, sync_dist=True)  # type: ignore[arg-type]
-        return {"loss": -metrics["pf1/train"]}
+        return {"loss": -metrics["metrics/pf1/train"]}
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
         prediction = self(batch["pixels"])
