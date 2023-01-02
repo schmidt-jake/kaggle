@@ -17,7 +17,7 @@ trainer:
       patience: 5
   gradient_clip_val: 1.0
   gradient_clip_algorithm: value
-  log_every_n_steps: 1
+  log_every_n_steps: 10
   num_sanity_val_steps: 0
   benchmark: true
   max_epochs: 10
