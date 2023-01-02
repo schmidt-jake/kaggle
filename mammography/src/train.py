@@ -282,14 +282,14 @@ class Model(pl.LightningModule):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction = self(batch["pixels"])
-        loss = self.loss(input=prediction, target=batch["cancer"])
+        loss = self.loss(input=prediction, target=batch["cancer"].float())
         self.train_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
         prediction = self(batch["pixels"])
-        loss = self.loss(input=prediction, target=batch["cancer"])
+        loss = self.loss(input=prediction, target=batch["cancer"].float())
         self.val_metrics(preds=prediction, target=batch["cancer"])
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
         return {"loss": loss}
