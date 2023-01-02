@@ -162,30 +162,36 @@ def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, A
 
 class DataModule(pl.LightningDataModule):
     def __init__(
-        self, root_dir: str, augmentation: torch.nn.Sequential, batch_size: int, prefetch_batches: int
+        self,
+        metadata_filepath: str,
+        image_dir: str,
+        augmentation: torch.nn.Sequential,
+        batch_size: int,
+        prefetch_batches: int,
     ) -> None:
         super().__init__()
-        self.root_dir = root_dir
+        self.metadata_filepath = metadata_filepath
+        self.image_dir = image_dir
         self.augmentation = augmentation
         self.batch_size = batch_size
         self.num_workers = torch.multiprocessing.cpu_count()
         self.prefetch = max(prefetch_batches * self.batch_size // self.num_workers, 2)
 
     def setup(self, stage: str) -> None:
+        self.df = pd.read_csv(self.metadata_filepath)
         if stage == "fit":
-            stage = "train"
-        self.df = pd.read_csv(os.path.join(self.root_dir, f"{stage}.csv"))
-        # self.df["filepath"] = (
-        #     self.root_dir
-        #     + "/"
-        #     + f"{stage}_images"
-        #     + "/"
-        #     + self.df["patient_id"].astype(str)
-        #     + "/"
-        #     + self.df["image_id"].astype(str)
-        #     + ".dcm"
-        # )
-        self.df["filepath"] = self.root_dir + "/" + self.df["image_id"].astype(str) + ".png"
+            self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
+        elif stage == "predict":
+            self.df["filepath"] = (
+                self.image_dir
+                + "/"
+                + f"{stage}_images"
+                + "/"
+                + self.df["patient_id"].astype(str)
+                + "/"
+                + self.df["image_id"].astype(str)
+                + ".dcm"
+            )
 
     def train_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
@@ -230,7 +236,7 @@ class DataModule(pl.LightningDataModule):
     #     self._val_cache.cleanup()
     #     super().teardown(stage)
 
-    def test_dataloader(self) -> DataLoader:
+    def predict_dataloader(self) -> DataLoader:
         return self.val_dataloader()
 
 

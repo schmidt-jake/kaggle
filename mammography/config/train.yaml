@@ -31,7 +31,8 @@ trainer:
   #     active: 5
 datamodule:
   _target_: mammography.src.train.DataModule
-  root_dir: ???
+  metadata_filepath: ???
+  image_dir: ???
   batch_size: 20
   prefetch_batches: 5
   augmentation:
