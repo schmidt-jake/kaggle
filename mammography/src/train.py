@@ -10,7 +10,6 @@ import numpy.typing as npt
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-import wandb
 
 # from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
@@ -28,6 +27,8 @@ from torchmetrics.classification import (
     BinaryCalibrationError,
 )
 from torchvision.models.feature_extraction import create_feature_extractor
+
+import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +287,12 @@ class Model(pl.LightningModule):
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
-            self.classifier[-1].bias.data.fill_(self.get_bias(self.trainer.datamodule.df["cancer"]))
+            self.classifier[-1].bias = torch.nn.Parameter(
+                data=torch.tensor(
+                    self.get_bias(self.trainer.datamodule.df["cancer"]), dtype=self.classifier[-1].bias.dtype
+                )
+            )
+            torch.nn.init.zeros_(self.classifier[-1].weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.precision == 16:
