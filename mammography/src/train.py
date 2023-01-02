@@ -316,11 +316,11 @@ class Model(pl.LightningModule):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
-        wandb.log(
+        self.logger.experiment.log(
             {
                 "pixels/train": wandb.Histogram(batch["pixels"].detach().cpu()),
                 "predictions/train": wandb.Histogram(prediction.detach().cpu()),
-                "labels/train": wandb.Histogram(batch["cancer"].detach().cpu()),
+                "labels/train": batch["cancer"].detach().float().mean().cpu(),
             },
             step=self.global_step,
         )
