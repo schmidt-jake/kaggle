@@ -39,6 +39,8 @@ datamodule:
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
+      - _target_: torchvision.transforms.Resize
+        size: 512
       - _target_: torchvision.transforms.RandomHorizontalFlip
       - _target_: torchvision.transforms.RandomAffine
         degrees: 40.0
@@ -51,8 +53,6 @@ datamodule:
         shear:
           - 0.2
           - 0.2
-      - _target_: torchvision.transforms.Resize
-        size: 512
       - _target_: torchvision.transforms.CenterCrop
         size: 512
 model:

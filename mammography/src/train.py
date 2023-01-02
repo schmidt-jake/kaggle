@@ -164,7 +164,7 @@ class DataModule(pl.LightningDataModule):
         super().__init__()
         self.metadata_filepath = metadata_filepath
         self.image_dir = image_dir
-        self.augmentation = augmentation
+        self.augmentation = torch.jit.script(augmentation)
         self.batch_size = batch_size
         self.num_workers = torch.multiprocessing.cpu_count()
         self.prefetch = max(prefetch_batches * self.batch_size // max(self.num_workers, 1), 2)
