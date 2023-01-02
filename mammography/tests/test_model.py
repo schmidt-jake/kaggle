@@ -12,7 +12,7 @@ from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
 def data_patch(filepath: str) -> npt.NDArray[np.uint16]:
-    return np.random.randint(size=(1, 512, 512), low=0, high=2**16 - 1, dtype=np.uint16)
+    return np.random.randint(size=(1, 512, 512), low=0, high=255, dtype=np.uint8)
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
