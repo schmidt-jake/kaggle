@@ -286,10 +286,7 @@ class Model(pl.LightningModule):
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
-            torch.nn.init.constant_(
-                tensor=self.classifier[-1].bias,
-                val=self.get_bias(self.trainer.datamodule.df["cancer"]),  # type: ignore[attr-defined]
-            )
+            self.classifier[-1].bias.data.fill_(self.get_bias(self.trainer.datamodule.df["cancer"]))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.precision == 16:

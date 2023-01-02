@@ -1,4 +1,5 @@
 import logging
+import os
 
 import hydra
 import pandas as pd
@@ -7,6 +8,12 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
+
+
+os.environ.update(
+    WANDB_DOCKER=os.environ["KAGGLE_DOCKER_IMAGE"],
+    WANDB_JOB_TYPE="submission",
+)
 
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
