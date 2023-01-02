@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
-from torchmetrics import CatMetric, MeanMetric, Metric, MetricCollection, MinMaxMetric
+from torchmetrics import CatMetric, Metric, MetricCollection
 from torchmetrics.classification import (
     BinaryAccuracy,
     BinaryAUROC,
@@ -245,8 +245,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
-                "predictions/mean": MeanMetric(nan_strategy="error"),
-                "predictions/minmax": MinMaxMetric(CatMetric(nan_strategy="error")),
+                "predictions": CatMetric(nan_strategy="error"),
             },
             prefix="metrics/",
             postfix="/train",
