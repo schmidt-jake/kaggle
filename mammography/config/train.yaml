@@ -3,18 +3,23 @@ trainer:
   # auto_scale_batch_size: binsearch
   callbacks:
     - _target_: pytorch_lightning.callbacks.ModelCheckpoint
-      mode: max
+      mode: &mode max
       every_n_epochs: 1
       save_top_k: 1
       verbose: true
-      monitor: metrics/pf1/val
+      monitor: &monitor metrics/pf1/val
     - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+    - _target_: pytorch_lightning.callbacks.EarlyStopping
+      monitor: *monitor
+      verbose: true
+      mode: *mode
+      divergence_threshold: 0.1
   gradient_clip_val: 1.0
   gradient_clip_algorithm: value
   log_every_n_steps: 1
   num_sanity_val_steps: 0
   benchmark: true
-  max_epochs: 100
+  max_epochs: 10
   precision: 16
   default_root_dir: ???
   accumulate_grad_batches: 1

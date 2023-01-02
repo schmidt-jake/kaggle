@@ -350,12 +350,11 @@ def train(cfg: DictConfig) -> None:
     wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
 
+    [logger.log_hyperparams(cfg) for logger in trainer.loggers]
+
     if hasattr(trainer, "profiler"):
-        # create a wandb Artifact
         profile_art = wandb.Artifact("trace", type="profile")
-        # add the pt.trace.json files to the Artifact
-        profile_art.add_file(glob(os.path.join(trainer.profiler.dirpath, "*.pt.trace.json")))
-        # log the artifact
+        profile_art.add_dir(trainer.profiler.dirpath)
         profile_art.save()
 
 
