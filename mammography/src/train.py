@@ -288,8 +288,9 @@ class Model(pl.LightningModule):
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
             self.classifier[-1].bias = torch.nn.Parameter(
-                data=torch.tensor(
-                    self.get_bias(self.trainer.datamodule.df["cancer"]), dtype=self.classifier[-1].bias.dtype
+                data=torch.full_like(
+                    input=self.classifier[-1].bias,
+                    fill_value=self.get_bias(self.trainer.datamodule.df["cancer"]),
                 )
             )
             torch.nn.init.zeros_(self.classifier[-1].weight)
