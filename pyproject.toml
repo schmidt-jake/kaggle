@@ -27,3 +27,4 @@ target-version = ["py310"]
 [tool.pytest]
 addopts = ["-s", "--typeguard-packages=mayo_clinic_strip_ai,mammography,tests"]
 log_cli = true
+env = ["WANDB_MODE = offline"]
