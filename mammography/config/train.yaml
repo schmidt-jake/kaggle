@@ -17,6 +17,7 @@ trainer:
   max_epochs: 100
   precision: 16
   default_root_dir: ???
+  accumulate_grad_batches: 1
   logger:
     - _target_: pytorch_lightning.loggers.WandbLogger
       project: rsna-breast-cancer-detection
@@ -33,7 +34,7 @@ datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???
   image_dir: ???
-  batch_size: 22
+  batch_size: 23
   prefetch_batches: 1
   augmentation:
     _target_: torch.nn.Sequential
@@ -60,4 +61,4 @@ model:
       - _target_: torch.nn.Linear
         in_features: 2208
         out_features: 1
-      - _target_: torch.nn.Sigmoid
+      # - _target_: torch.nn.Sigmoid
