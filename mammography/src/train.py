@@ -347,10 +347,10 @@ def train(cfg: DictConfig) -> None:
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
     # model = model.to(memory_format=torch.channels_last)
-    wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
+    wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
 
-    [logger.log_hyperparams(cfg) for logger in trainer.loggers]
+    [logger.log_hyperparams(cfg) for logger in trainer.loggers]  # type: ignore[arg-type]
 
     if hasattr(trainer, "profiler"):
         profile_art = wandb.Artifact("trace", type="profile")
