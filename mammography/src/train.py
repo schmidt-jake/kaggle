@@ -44,9 +44,10 @@ class ProbabilisticBinaryF1Score(Metric):
         self.add_state("cfp", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        self.y_true_count += target.numel()  # type: ignore[operator]
-        self.ctp += preds[target == 1].sum()
-        self.cfp += preds[target == 0].sum()
+        is_y_true = target == 1
+        self.y_true_count += is_y_true.sum()  # type: ignore[operator]
+        self.ctp += preds[is_y_true].sum()
+        self.cfp += preds[is_y_true.logical_not()].sum()
 
     def compute(self) -> torch.Tensor:
         c_precision = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
