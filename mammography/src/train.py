@@ -316,7 +316,14 @@ class Model(pl.LightningModule):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
-        wandb.log({"predictions/train": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
+        wandb.log(
+            {
+                "pixels/train": wandb.Histogram(batch["pixels"].detach().cpu()),
+                "predictions/train": wandb.Histogram(prediction.detach().cpu()),
+                "labels/train": wandb.Histogram(batch["cancer"].detach().cpu()),
+            },
+            step=self.global_step,
+        )
         loss: torch.Tensor = self.loss(input=prediction, target=batch["cancer"].float())
         self.train_metrics(preds=prediction.sigmoid(), target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
@@ -324,7 +331,7 @@ class Model(pl.LightningModule):
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
-        wandb.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
+        # wandb.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
         loss: torch.Tensor = self.loss(input=prediction, target=batch["cancer"].float())
         self.val_metrics(preds=prediction.sigmoid(), target=batch["cancer"])
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
