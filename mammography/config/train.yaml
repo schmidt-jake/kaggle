@@ -23,7 +23,7 @@ trainer:
   max_epochs: 10
   precision: 16
   default_root_dir: ???
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 2
   logger:
     - _target_: pytorch_lightning.loggers.WandbLogger
       project: rsna-breast-cancer-detection
