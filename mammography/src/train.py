@@ -45,8 +45,8 @@ class ProbabilisticBinaryF1Score(Metric):
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
         self.y_true_count += target.numel()  # type: ignore[operator]
-        self.ctp += preds[target].sum()
-        self.cfp += preds[target.logical_not()].sum()
+        self.ctp += preds[target == 1].sum()
+        self.cfp += preds[target == 0].sum()
 
     def compute(self) -> torch.Tensor:
         c_precision = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
@@ -133,10 +133,11 @@ def dicom2numpy(filepath: str) -> npt.NDArray[np.uint8]:
     dcm = dicomsdl.open(filepath)
     arr = dcm.pixelData(storedvalue=True)
     # arr = cv2.convertScaleAbs(arr, alpha=1.0 / 256.0, beta=-0.49999)
-    arr = arr.astype(np.float32)
-    arr /= 65_535.0
-    arr *= 255.0
-    arr = arr.astype(np.uint8)
+    # arr = arr.astype(np.float32)
+    # arr /= 65_535.0
+    # arr *= 255.0
+    # arr = arr.astype(np.uint8)
+    arr = cv2.normalize(src=arr, dst=arr, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     # https://escapetech.eu/manuals/qmedical/commands/index_Values_of_Interest__.html
     if dcm.getPixelDataInfo()["PhotometricInterpretation"] == "MONOCHROME1":
         # https://dicom.nema.org/medical/Dicom/2017c/output/chtml/part03/sect_C.7.6.3.html#sect_C.7.6.3.1.2
@@ -252,9 +253,10 @@ class Model(pl.LightningModule):
             x = x.half()
         else:
             x = x.float()
-        features: torch.Tensor = checkpoint_sequential(
-            self.feature_extractor, segments=5, input=x, preserve_rng_state=False
-        )
+        # features: torch.Tensor = checkpoint_sequential(
+        #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
+        # )
+        features = self.feature_extractor(x)
         predictions: torch.Tensor = self.classifier(features)
         # predictions: torch.Tensor = checkpoint_sequential(
         #     self.classifier, segments=2, input=features, preserve_rng_state=False

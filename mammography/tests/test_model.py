@@ -26,7 +26,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "trainer.max_epochs=1",
                 "~trainer.precision",
                 f"trainer.default_root_dir={tmp_path}",
-                "datamodule.root_dir=mammography/data",
+                "datamodule.root_dir=mammography/data/raw",
                 "trainer.logger=null",
             ],
         )
@@ -38,7 +38,7 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
-            overrides=["datamodule.root_dir=mammography/data"],
+            overrides=["datamodule.root_dir=mammography/data/raw"],
         )
         datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
         datamodule.setup(stage="fit")
