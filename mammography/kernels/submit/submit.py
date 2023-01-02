@@ -1,32 +1,28 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "submission.to_csv('submission.csv', index=False)"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "venv",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "name": "python",
-   "version": "3.10.9 (main, Dec 18 2022, 11:10:05) [Clang 14.0.0 (clang-1400.0.29.202)]"
-  },
-  "orig_nbformat": 4,
-  "vscode": {
-   "interpreter": {
-    "hash": "d52c5dda17f9508f8c81892741a0a3fc0e911e20955170b5bf56fae13e0374bd"
-   }
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 2
-}
+import logging
+
+import hydra
+import pandas as pd
+import pytorch_lightning as pl
+from hydra.utils import instantiate
+from omegaconf import DictConfig
+
+logger = logging.getLogger(__name__)
+
+
+@hydra.main(config_path="../config", config_name="train", version_base=None)
+def submit(cfg: DictConfig) -> None:
+    model: pl.LightningModule = instantiate(cfg.model)
+    datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
+    trainer: pl.Trainer = instantiate(cfg.trainer)
+    predictions = trainer.predict(model=model, datamodule=datamodule, return_predictions=True, ckpt_path=cfg.ckpt_path)
+    print(pd.DataFrame(predictions))
+    # test_df = pd.read_csv("../input/rsna-breast-cancer-detection/test.csv")
+    # test_df["prediction_id"] = test_df["patient_id"].astype(str) + "_" + test_df["laterality"]
+    # test_df.drop_duplicates("prediction_id", inplace=True)
+    # test_df["cancer"] = np.random.random(len(test_df))
+    # test_df[["prediction_id", "cancer"]].to_csv("submission.csv", index=False)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.NOTSET)
+    submit()
