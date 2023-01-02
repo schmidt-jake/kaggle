@@ -245,7 +245,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
-                "predictions": CatMetric(nan_strategy="error"),
+                # "predictions": CatMetric(nan_strategy="error"),
             },
             prefix="metrics/",
             postfix="/train",
@@ -327,7 +327,7 @@ class Model(pl.LightningModule):
         #     step=self.global_step,
         # )
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
-        self.train_metrics(preds=preds, target=batch["cancer"], value=preds)
+        self.train_metrics(preds=preds, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
