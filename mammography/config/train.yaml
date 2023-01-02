@@ -39,9 +39,22 @@ datamodule:
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
-      - _target_: torchvision.transforms.RandomCrop
+      - _target_: torchvision.transforms.RandomHorizontalFlip
+      - _target_: torchvision.transforms.RandomAffine
+        degrees: 40.0
+        translate:
+          - 0.2
+          - 0.2
+        scale:
+          - 0.2
+          - 0.2
+        shear:
+          - 0.2
+          - 0.2
+      - _target_: torchvision.transforms.Resize
         size: 512
-        pad_if_needed: true
+      - _target_: torchvision.transforms.CenterCrop
+        size: 512
 model:
   _target_: mammography.src.train.Model
   optimizer_config:
