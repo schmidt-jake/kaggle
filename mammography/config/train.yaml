@@ -45,7 +45,7 @@ datamodule:
 model:
   _target_: mammography.src.train.Model
   optimizer_config:
-    _target_: torch.optim.AdamW
+    _target_: torch.optim.SGD
     lr: 1e-3
     weight_decay: 0.2
     _partial_: true

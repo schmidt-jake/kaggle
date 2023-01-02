@@ -295,7 +295,7 @@ class Model(pl.LightningModule):
             #     requires_grad=True,
             # )
             torch.nn.init.constant_(
-                tensor=self.classifier[-1].bias.data, val=self.get_bias(self.trainer.datamodule.df["cancer"])
+                tensor=self.classifier[-1].bias, val=self.get_bias(self.trainer.datamodule.df["cancer"])
             )
             torch.nn.init.zeros_(self.classifier[-1].weight)
 
