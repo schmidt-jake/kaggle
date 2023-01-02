@@ -284,7 +284,7 @@ class Model(pl.LightningModule):
     def setup(self, stage: str) -> None:
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss(
-                pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
+                # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
             torch.nn.init.constant_(
                 tensor=self.classifier[-1].bias,
