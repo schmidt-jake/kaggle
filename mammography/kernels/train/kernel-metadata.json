@@ -9,7 +9,9 @@
   "enable_gpu": true,
   "enable_internet": true,
   "keywords": [],
-  "dataset_sources": [],
+  "dataset_sources": [
+    "datasets/jakeschmidt/mammography-uint8-crops"
+  ],
   "kernel_sources": [],
   "competition_sources": [
     "competitions/rsna-breast-cancer-detection"
