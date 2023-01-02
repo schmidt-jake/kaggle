@@ -46,7 +46,6 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
             overrides=[
                 "datamodule.image_dir=mammography/data/uint8_crops/png",
                 "datamodule.metadata_filepath=mammography/data/raw/train.csv",
-                "datamodule.batch_size=2",
                 "datamodule.prefetch_batches=0",
             ],
         )
@@ -56,8 +55,9 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
         for batch in dataloader:
             assert "pixels" in batch.keys()
             assert "cancer" in batch.keys()
-            assert batch["pixels"].shape == (2, 1, 512, 512)
-            break
+            assert batch["pixels"].shape == (cfg.datamodule.batch_size, 1, 512, 512)
+            assert batch["cancer"].float().mean().item() > 0.1
+            # break
 
 
 def test_pf1_metric() -> None:

@@ -16,12 +16,17 @@ import wandb
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
+from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
+from torchmetrics.classification import (
+    BinaryAccuracy,
+    BinaryAUROC,
+    BinaryCalibrationError,
+)
 from torchvision.models.feature_extraction import create_feature_extractor
 
 logger = logging.getLogger(__name__)
@@ -172,8 +177,8 @@ class DataModule(pl.LightningDataModule):
         self.df = pd.read_csv(self.metadata_filepath)
         if stage == "fit":
             self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
-            self.class_weights = self.compute_class_weights(self.df["cancer"])
-            self.df["sample_weight"] = self.df["cancer"].map(self.class_weights.get)
+            class_weights = 1.0 / self.df["cancer"].value_counts()
+            self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
         elif stage == "predict":
             self.df["filepath"] = (
                 self.image_dir
@@ -250,6 +255,7 @@ class Model(pl.LightningModule):
                 "accuracy": BinaryAccuracy(validate_args=False),
                 # "roc": BinaryROC(validate_args=False),
                 "auroc": BinaryAUROC(validate_args=False),
+                "calibration_error": BinaryCalibrationError(validate_args=False),
             },
             prefix="metrics/",
             postfix="/val",
@@ -317,7 +323,8 @@ class Model(pl.LightningModule):
         return {"loss": loss}
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
-        return self(batch["pixels"])
+        logit: torch.Tensor = self(batch["pixels"])
+        return logit.sigmoid()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return self.optimizer_config(params=self.parameters())
@@ -339,7 +346,7 @@ def train(cfg: DictConfig) -> None:
 
     [logger.log_hyperparams(cfg) for logger in trainer.loggers]  # type: ignore[arg-type]
 
-    if hasattr(trainer, "profiler"):
+    if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")
         profile_art.add_dir(trainer.profiler.dirpath)
         profile_art.save()
