@@ -10,6 +10,7 @@ import numpy.typing as npt
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import wandb
 
 # from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
@@ -20,15 +21,13 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
-from torchmetrics import MeanMetric, Metric, MetricCollection
+from torchmetrics import CatMetric, MeanMetric, Metric, MetricCollection, MinMaxMetric
 from torchmetrics.classification import (
     BinaryAccuracy,
     BinaryAUROC,
     BinaryCalibrationError,
 )
 from torchvision.models.feature_extraction import create_feature_extractor
-
-import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +245,8 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
-                "predictions": MeanMetric(nan_strategy="error"),
+                "predictions/mean": MeanMetric(nan_strategy="error"),
+                "predictions/minmax": MinMaxMetric(CatMetric(nan_strategy="error")),
             },
             prefix="metrics/",
             postfix="/train",

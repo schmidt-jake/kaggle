@@ -18,7 +18,7 @@ def inspect_png(filepath: str):
 def main() -> None:
     with Pool(8) as pool:
         x = pd.DataFrame(pool.map(inspect_png, tqdm(glob("mammography/data/uint8_crops/png/*.png"))))
-    x.to_csv("inspect.csv")
+    x.to_csv("inspect.csv", index=False)
 
 
 if __name__ == "__main__":
