@@ -357,7 +357,7 @@ def train(cfg: DictConfig) -> None:
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
-    wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
+    # wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
 
     [logger.log_hyperparams(cfg) for logger in trainer.loggers]  # type: ignore[arg-type]
