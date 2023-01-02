@@ -96,13 +96,14 @@ class DataframeDataPipe(Dataset):
         return arr
 
     @staticmethod
-    def _read(filepath: str) -> npt.NDArray[np.uint16]:
+    def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
             arr = dicom2numpy(filepath)
             arr = crop(arr)
+            return arr
         elif filepath.endswith(".png"):
-            arr = cv2.imread(filepath)
-        return arr
+            arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+            return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         cv2.setNumThreads(0)
