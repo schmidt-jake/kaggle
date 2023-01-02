@@ -59,7 +59,8 @@ model:
   classifier:
     _target_: torch.nn.Sequential
     _args_:
+      - _target_: torch.nn.BatchNorm1d
+        num_features: &num_features 2208
       - _target_: torch.nn.Linear
-        in_features: 2208
+        in_features: *num_features
         out_features: 1
-        bias: True

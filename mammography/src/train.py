@@ -287,9 +287,17 @@ class Model(pl.LightningModule):
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
-            # torch.nn.init.constant_(
-            #     tensor=self.classifier[-1].bias, val=self.get_bias(self.trainer.datamodule.df["cancer"])
-            # )
+            for m in self.modules():
+                if isinstance(m, torch.nn.Conv2d):
+                    torch.nn.init.kaiming_normal_(m.weight)
+                elif isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                    torch.nn.init.constant_(m.weight, 1)
+                    torch.nn.init.constant_(m.bias, 0)
+                elif isinstance(m, torch.nn.Linear):
+                    torch.nn.init.constant_(m.bias, 0)
+            torch.nn.init.constant_(
+                tensor=self.classifier[-1].bias, val=self.get_bias(self.trainer.datamodule.df["cancer"])
+            )
             torch.nn.init.zeros_(self.classifier[-1].weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
