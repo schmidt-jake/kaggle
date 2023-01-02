@@ -318,14 +318,14 @@ class Model(pl.LightningModule):
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         logit: torch.Tensor = self(batch["pixels"])
         preds = logit.sigmoid()
-        self.logger.experiment.log(
-            {
-                "pixels/train": wandb.Histogram(batch["pixels"].detach().cpu()),
-                "predictions/train": wandb.Histogram(preds.detach().cpu()),
-                "labels/train": batch["cancer"].detach().float().mean().cpu(),
-            },
-            step=self.global_step,
-        )
+        # self.logger.experiment.log(
+        #     {
+        #         "pixels/train": wandb.Histogram(batch["pixels"].detach().cpu()),
+        #         "predictions/train": wandb.Histogram(preds.detach().cpu()),
+        #         "labels/train": batch["cancer"].detach().float().mean().cpu(),
+        #     },
+        #     step=self.global_step,
+        # )
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
         self.train_metrics(preds=preds, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
@@ -334,7 +334,7 @@ class Model(pl.LightningModule):
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         logit: torch.Tensor = self(batch["pixels"])
         preds = logit.sigmoid()
-        # wandb.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
+        # self.logger.experiment.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
         self.val_metrics(preds=preds, target=batch["cancer"])
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
@@ -359,11 +359,9 @@ def train(cfg: DictConfig) -> None:
     trainer: pl.Trainer = instantiate(cfg.trainer)
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
-    # wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
+    trainer.logger.log_hyperparams(cfg)
+    # trainer.logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
-
-    [logger.log_hyperparams(cfg) for logger in trainer.loggers]  # type: ignore[arg-type]
-
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")
         profile_art.add_dir(trainer.profiler.dirpath)
