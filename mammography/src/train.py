@@ -171,8 +171,8 @@ class DataModule(pl.LightningDataModule):
         self.df = pd.read_csv(self.metadata_filepath)
         if stage == "fit":
             self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
-            class_weights = self.compute_class_weights(self.df["cancer"])
-            self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
+            self.class_weights = self.compute_class_weights(self.df["cancer"])
+            self.df["sample_weight"] = self.df["cancer"].map(self.class_weights.get)
         elif stage == "predict":
             self.df["filepath"] = (
                 self.image_dir
@@ -262,8 +262,36 @@ class Model(pl.LightningModule):
             prefix="metrics/",
             postfix="/val",
         )
-        self.loss = torch.nn.BCEWithLogitsLoss()
         self.optimizer_config = optimizer_config
+
+    @staticmethod
+    def get_bias(y: pd.Series) -> float:
+        """
+        Gets the value of the input to the sigmoid function such that
+        it outputs the probability of the postive class.
+
+        Parameters
+        ----------
+        y : pd.Series
+            The vector of binary labels for the training data
+
+        Returns
+        -------
+        float
+            The bias value.
+        """
+        p = y.mean()
+        return np.log(p / (1 - p))
+
+    def setup(self, stage: str) -> None:
+        if stage == "fit":
+            self.loss = torch.nn.BCEWithLogitsLoss(
+                pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),
+            )
+            torch.nn.init.constant_(
+                tensor=self.classifier[-1].bias,
+                val=self.get_bias(self.trainer.datamodule.df["cancer"]),
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.precision == 16:
@@ -287,7 +315,7 @@ class Model(pl.LightningModule):
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
         loss: torch.Tensor = self.loss(input=prediction, target=batch["cancer"].float())
         self.val_metrics(preds=prediction.sigmoid(), target=batch["cancer"])
