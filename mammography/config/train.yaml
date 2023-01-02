@@ -21,15 +21,6 @@ trainer:
   logger:
     - _target_: pytorch_lightning.loggers.WandbLogger
       project: rsna-breast-cancer-detection
-  # profiler:
-  #   _target_: pytorch_lightning.profiler.PyTorchProfiler
-  #   filename: profile
-  #   schedule:
-  #     _target_: torch.profiler.schedule
-  #     skip_first: 2
-  #     wait: 0
-  #     warmup: 2
-  #     active: 5
 datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???

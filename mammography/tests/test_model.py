@@ -30,7 +30,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "datamodule.image_dir=mammography/data/uint8_crops/png",
                 "datamodule.metadata_filepath=mammography/data/raw/train.csv",
                 "datamodule.batch_size=2",
-                "trainer.logger=null",
+                # "~trainer.logger",
                 "datamodule.prefetch_batches=0",
             ],
         )

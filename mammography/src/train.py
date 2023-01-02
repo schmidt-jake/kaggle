@@ -1,4 +1,6 @@
 import logging
+import os
+from glob import glob
 from inspect import signature
 from typing import Any, Callable, Dict, List
 
@@ -10,11 +12,13 @@ import numpy.typing as npt
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import wandb
 
 # from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
+from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
@@ -286,11 +290,11 @@ class Model(pl.LightningModule):
     def setup(self, stage: str) -> None:
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss(
-                pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),
+                pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
             torch.nn.init.constant_(
                 tensor=self.classifier[-1].bias,
-                val=self.get_bias(self.trainer.datamodule.df["cancer"]),
+                val=self.get_bias(self.trainer.datamodule.df["cancer"]),  # type: ignore[attr-defined]
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -310,6 +314,7 @@ class Model(pl.LightningModule):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
+        wandb.log({"predictions/train": wandb.Histogram(prediction.detach())}, step=self.global_step)
         loss: torch.Tensor = self.loss(input=prediction, target=batch["cancer"].float())
         self.train_metrics(preds=prediction.sigmoid(), target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
@@ -317,6 +322,7 @@ class Model(pl.LightningModule):
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction: torch.Tensor = self(batch["pixels"])
+        wandb.log({"predictions/val": wandb.Histogram(prediction.detach())}, step=self.global_step)
         loss: torch.Tensor = self.loss(input=prediction, target=batch["cancer"].float())
         self.val_metrics(preds=prediction.sigmoid(), target=batch["cancer"])
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
@@ -341,11 +347,16 @@ def train(cfg: DictConfig) -> None:
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
     # model = model.to(memory_format=torch.channels_last)
-    for logger in trainer.loggers:
-        logger.log_hyperparams(cfg)  # type: ignore[arg-type]
-        # if isinstance(logger, WandbLogger):
-        #     logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
+    wandb.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps)
     trainer.fit(model=model, datamodule=datamodule)
+
+    if hasattr(trainer, "profiler"):
+        # create a wandb Artifact
+        profile_art = wandb.Artifact("trace", type="profile")
+        # add the pt.trace.json files to the Artifact
+        profile_art.add_file(glob(os.path.join(trainer.profiler.dirpath, "*.pt.trace.json")))
+        # log the artifact
+        profile_art.save()
 
 
 if __name__ == "__main__":
