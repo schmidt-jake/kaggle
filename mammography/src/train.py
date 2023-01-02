@@ -18,13 +18,12 @@ import torch
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
-from torch.utils.checkpoint import checkpoint_sequential
 from torch.utils.data import DataLoader, Dataset
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import BinaryAccuracy, BinaryAUROC, BinaryROC
+from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 from torchvision.models.feature_extraction import create_feature_extractor
 
 logger = logging.getLogger(__name__)
@@ -104,6 +103,8 @@ class DataframeDataPipe(Dataset):
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
             return arr
+        else:
+            raise ValueError(f"Got unknown file suffix in filepath: {filepath}")
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         cv2.setNumThreads(0)
