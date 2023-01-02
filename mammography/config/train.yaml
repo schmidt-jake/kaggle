@@ -27,12 +27,15 @@ trainer:
   logger:
     - _target_: pytorch_lightning.loggers.WandbLogger
       project: rsna-breast-cancer-detection
+      job_type: training
+      log_model: all
+      save_dir: ${trainer.default_root_dir}
 datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???
   image_dir: ???
   batch_size: 23
-  prefetch_batches: 1
+  prefetch_batches: 2
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
@@ -59,4 +62,3 @@ model:
       - _target_: torch.nn.Linear
         in_features: 2208
         out_features: 1
-      # - _target_: torch.nn.Sigmoid
