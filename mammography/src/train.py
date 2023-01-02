@@ -282,13 +282,13 @@ class Model(pl.LightningModule):
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         prediction = self(batch["pixels"])
         metrics = self.train_metrics(preds=prediction, target=batch["cancer"])
-        self.log_dict(self.train_metrics, on_step=True, on_epoch=False, sync_dist=True)  # type: ignore[arg-type]
+        self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": -metrics["metrics/pf1/train"]}
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
         prediction = self(batch["pixels"])
         self.val_metrics(preds=prediction, target=batch["cancer"])
-        self.log_dict(self.val_metrics, on_step=False, on_epoch=True, sync_dist=True)  # type: ignore[arg-type]
+        self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
         return self(batch["pixels"])
