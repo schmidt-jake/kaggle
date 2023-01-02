@@ -289,9 +289,10 @@ class Model(pl.LightningModule):
             )
             self.classifier[-1].bias = torch.nn.Parameter(
                 data=torch.full_like(
-                    input=self.classifier[-1].bias,
+                    input=self.classifier[-1].bias.data,
                     fill_value=self.get_bias(self.trainer.datamodule.df["cancer"]),
-                )
+                ),
+                requires_grad=True,
             )
             torch.nn.init.zeros_(self.classifier[-1].weight)
 
