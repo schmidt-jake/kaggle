@@ -15,7 +15,7 @@ import torch
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
@@ -163,10 +163,16 @@ class DataModule(pl.LightningDataModule):
         self.num_workers = torch.multiprocessing.cpu_count()
         self.prefetch = max(prefetch_batches * self.batch_size // max(self.num_workers, 1), 2)
 
+    @staticmethod
+    def compute_class_weights(y: pd.Series) -> pd.Series:
+        return len(y) / (y.nunique() * y.value_counts())
+
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
         if stage == "fit":
             self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
+            class_weights = self.compute_class_weights(self.df["cancer"])
+            self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
         elif stage == "predict":
             self.df["filepath"] = (
                 self.image_dir
@@ -188,6 +194,11 @@ class DataModule(pl.LightningDataModule):
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch,
+            sampler=WeightedRandomSampler(
+                weights=self.df["sample_weight"],
+                num_samples=len(self.df),
+                replacement=False,
+            ),
         )
         # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
@@ -234,7 +245,14 @@ class Model(pl.LightningModule):
         super().__init__()
         self.feature_extractor = feature_extractor
         self.classifier = classifier
-        self.train_metrics = MetricCollection({"pf1": ProbabilisticBinaryF1Score()}, postfix="/train")
+        self.train_metrics = MetricCollection(
+            {
+                "pf1": ProbabilisticBinaryF1Score(),
+                "accuracy": BinaryAccuracy(validate_args=False),
+            },
+            prefix="metrics/",
+            postfix="/train",
+        )
         self.val_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
@@ -242,6 +260,7 @@ class Model(pl.LightningModule):
                 # "roc": BinaryROC(validate_args=False),
                 "auroc": BinaryAUROC(validate_args=False),
             },
+            prefix="metrics/",
             postfix="/val",
         )
         self.optimizer_config = optimizer_config
