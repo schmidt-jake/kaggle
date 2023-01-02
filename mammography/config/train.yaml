@@ -22,6 +22,7 @@ trainer:
       project: rsna-breast-cancer-detection
   profiler:
     _target_: pytorch_lightning.profiler.PyTorchProfiler
+    filename: profile
     schedule:
       _target_: torch.profiler.schedule
       skip_first: 2

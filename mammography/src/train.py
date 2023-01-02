@@ -50,9 +50,12 @@ class ProbabilisticBinaryF1Score(Metric):
         self.cfp += preds[is_y_true.logical_not()].sum()
 
     def compute(self) -> torch.Tensor:
-        c_precision = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
-        c_recall = self.ctp / self.y_true_count  # type: ignore[operator]
-        result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
+        c_precision: torch.Tensor = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
+        c_recall: torch.Tensor = self.ctp / self.y_true_count  # type: ignore[operator]
+        if (c_precision > 0.0).item() and (c_recall > 0.0).item():
+            result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
+        else:
+            result = torch.tensor(0.0, dtype=torch.float32)
         return result
 
 
@@ -94,8 +97,11 @@ class DataframeDataPipe(Dataset):
 
     @staticmethod
     def _read(filepath: str) -> npt.NDArray[np.uint16]:
-        arr = dicom2numpy(filepath)
-        arr = crop(arr)
+        if filepath.endswith(".dcm"):
+            arr = dicom2numpy(filepath)
+            arr = crop(arr)
+        elif filepath.endswith(".png"):
+            arr = cv2.imread(filepath)
         return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
@@ -169,16 +175,17 @@ class DataModule(pl.LightningDataModule):
         if stage == "fit":
             stage = "train"
         self.df = pd.read_csv(os.path.join(self.root_dir, f"{stage}.csv"))
-        self.df["filepath"] = (
-            self.root_dir
-            + "/"
-            + f"{stage}_images"
-            + "/"
-            + self.df["patient_id"].astype(str)
-            + "/"
-            + self.df["image_id"].astype(str)
-            + ".dcm"
-        )
+        # self.df["filepath"] = (
+        #     self.root_dir
+        #     + "/"
+        #     + f"{stage}_images"
+        #     + "/"
+        #     + self.df["patient_id"].astype(str)
+        #     + "/"
+        #     + self.df["image_id"].astype(str)
+        #     + ".dcm"
+        # )
+        self.df["filepath"] = self.root_dir + "/" + self.df["image_id"].astype(str) + ".png"
 
     def train_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
