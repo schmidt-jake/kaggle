@@ -1,5 +1,6 @@
 trainer:
   _target_: pytorch_lightning.Trainer
+  accelerator: ???
   # auto_scale_batch_size: binsearch
   callbacks:
     - _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -25,11 +26,11 @@ trainer:
   default_root_dir: ???
   accumulate_grad_batches: 1
   logger:
-    - _target_: pytorch_lightning.loggers.WandbLogger
-      project: rsna-breast-cancer-detection
-      job_type: training
-      log_model: all
-      save_dir: ${trainer.default_root_dir}
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: rsna-breast-cancer-detection
+    job_type: training
+    log_model: all
+    save_dir: ${trainer.default_root_dir}
 datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???
@@ -40,16 +41,20 @@ datamodule:
     _target_: torch.nn.Sequential
     _args_:
       - _target_: torchvision.transforms.Resize
-        size: 512
+        _convert_: object
+        size:
+          - 512
+          - 512
       - _target_: torchvision.transforms.RandomHorizontalFlip
       - _target_: torchvision.transforms.RandomAffine
+        _convert_: object
         degrees: 40.0
         translate:
           - 0.2
           - 0.2
         scale:
-          - 0.2
-          - 0.2
+          - 0.8
+          - 1.2
         shear:
           - 0.2
           - 0.2

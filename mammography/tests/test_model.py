@@ -25,7 +25,6 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "+trainer.limit_train_batches=1",
                 "+trainer.limit_val_batches=1",
                 "trainer.max_epochs=1",
-                "~trainer.precision",
                 f"trainer.default_root_dir={tmp_path}",
                 "datamodule.image_dir=mammography/data/uint8_crops/png",
                 "datamodule.metadata_filepath=mammography/data/raw/train.csv",
@@ -33,6 +32,9 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "datamodule.prefetch_batches=0",
                 "+trainer.detect_anomaly=true",
                 "trainer.benchmark=false",
+                "+trainer.logger.mode=disabled",
+                f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
+                f"trainer.precision={16 if torch.cuda.is_available() else 32}",
             ],
         )
         train(cfg)

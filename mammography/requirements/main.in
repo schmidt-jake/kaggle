@@ -1,4 +1,10 @@
-dicomsdl
+# DICOM deps
+# dicomsdl
+pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+
+# other stuff
 # functorch<1.13.0  # compatible with torch 1.12.1
 # functorch==0.1.1  # compatible with torch 1.11
 hydra-core

@@ -3,7 +3,6 @@ from inspect import signature
 from typing import Any, Callable, Dict, List
 
 import cv2
-import dicomsdl
 import hydra
 import numpy as np
 import numpy.typing as npt
@@ -21,13 +20,15 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
-from torchmetrics import CatMetric, Metric, MetricCollection
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import (
     BinaryAccuracy,
     BinaryAUROC,
     BinaryCalibrationError,
 )
 from torchvision.models.feature_extraction import create_feature_extractor
+
+from mammography.src.utils import dicom2numpy
 
 logger = logging.getLogger(__name__)
 
@@ -89,13 +90,12 @@ class DataframeDataPipe(Dataset):
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
             arr = dicom2numpy(filepath)
-            arr = crop(arr)
             return arr
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-            return arr
         else:
             raise ValueError(f"Got unknown file suffix in filepath: {filepath}")
+        return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         cv2.setNumThreads(0)
@@ -114,34 +114,6 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
     layer_params = {k: getattr(layer_to_replace, k) for k in class_signature.keys() if hasattr(layer_to_replace, k)}
     layer_params.update(new_layer_kwargs)
     return type(layer_to_replace)(**layer_params)
-
-
-def crop(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-    thresh, mask = cv2.threshold(img, thresh=0, maxval=1, type=cv2.THRESH_OTSU)
-    logger.debug(f"thresh={thresh}")
-    contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
-    max_contour = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(max_contour)
-    cropped = img[y : y + h, x : x + w]
-    # https://stackoverflow.com/a/72666415/14841071
-    # img_uint8 = cv2.convertScaleAbs(cropped, alpha=1.0 / 256.0, beta=-0.49999)
-    return cropped
-
-
-def dicom2numpy(filepath: str) -> npt.NDArray[np.uint8]:
-    dcm = dicomsdl.open(filepath)
-    arr = dcm.pixelData(storedvalue=True)
-    # arr = cv2.convertScaleAbs(arr, alpha=1.0 / 256.0, beta=-0.49999)
-    # arr = arr.astype(np.float32)
-    # arr /= 65_535.0
-    # arr *= 255.0
-    # arr = arr.astype(np.uint8)
-    arr = cv2.normalize(src=arr, dst=arr, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    # https://escapetech.eu/manuals/qmedical/commands/index_Values_of_Interest__.html
-    if dcm.getPixelDataInfo()["PhotometricInterpretation"] == "MONOCHROME1":
-        # https://dicom.nema.org/medical/Dicom/2017c/output/chtml/part03/sect_C.7.6.3.html#sect_C.7.6.3.1.2
-        cv2.bitwise_not(arr, dst=arr)
-    return arr
 
 
 def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
