@@ -1,23 +1,29 @@
 from pathlib import Path
+from typing import Any, Dict
 
 import numpy as np
-import numpy.typing as npt
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from pytest import MonkeyPatch
+from torchmetrics import MetricCollection
 
 from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
-def data_patch(filepath: str) -> npt.NDArray[np.uint16]:
-    return np.random.randint(size=(1, 512, 512), low=0, high=255, dtype=np.uint8)
+def data_patch(index: int) -> Dict[str, Any]:
+    return {"pixels": torch.randint(size=(1, 512, 512), low=0, high=255, dtype=torch.uint8), "cancer": 0}
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
+    monkeypatch.setattr(
+        "pandas.read_csv",
+        lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0}] * 2),
+    )
+    monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
@@ -26,8 +32,8 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "+trainer.limit_val_batches=1",
                 "trainer.max_epochs=1",
                 f"trainer.default_root_dir={tmp_path}",
-                "datamodule.image_dir=mammography/data/uint8_crops/png",
-                "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+                "datamodule.image_dir=''",
+                "datamodule.metadata_filepath=''",
                 "datamodule.batch_size=2",
                 "datamodule.prefetch_batches=0",
                 "+trainer.detect_anomaly=true",

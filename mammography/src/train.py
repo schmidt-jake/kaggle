@@ -90,7 +90,6 @@ class DataframeDataPipe(Dataset):
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
             arr = dicom2numpy(filepath)
-            return arr
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         else:
@@ -98,7 +97,6 @@ class DataframeDataPipe(Dataset):
         return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
-        cv2.setNumThreads(0)
         row = self.df.iloc[index]
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
@@ -259,24 +257,20 @@ class Model(pl.LightningModule):
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
-            for m in self.modules():
-                if isinstance(m, torch.nn.Conv2d):
-                    torch.nn.init.kaiming_normal_(m.weight)
-                elif isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-                    torch.nn.init.constant_(m.weight, 1)
-                    torch.nn.init.constant_(m.bias, 0)
-                elif isinstance(m, torch.nn.Linear):
-                    torch.nn.init.constant_(m.bias, 0)
-            torch.nn.init.constant_(
-                tensor=self.classifier[-1].bias, val=self.get_bias(self.trainer.datamodule.df["cancer"])
-            )
-            torch.nn.init.zeros_(self.classifier[-1].weight)
+            # for m in self.modules():
+            #     if isinstance(m, torch.nn.Conv2d):
+            #         torch.nn.init.kaiming_normal_(m.weight)
+            #     elif isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            #         torch.nn.init.constant_(m.weight, 1)
+            #         torch.nn.init.constant_(m.bias, 0)
+            #     elif isinstance(m, torch.nn.Linear):
+            #         torch.nn.init.constant_(m.bias, 0)
+            # torch.nn.init.constant_(
+            #     tensor=self.classifier[-1].bias, val=self.get_bias(self.trainer.datamodule.df["cancer"])
+            # )
+            # torch.nn.init.zeros_(self.classifier[-1].weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.precision == 16:
-            x = x.half()
-        else:
-            x = x.float()
         # features: torch.Tensor = checkpoint_sequential(
         #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
         # )
