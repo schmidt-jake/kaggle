@@ -1,0 +1,84 @@
+trainer:
+  _target_: pytorch_lightning.Trainer
+  accelerator: ???
+  # auto_scale_batch_size: binsearch
+  callbacks:
+    - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      mode: &mode max
+      every_n_epochs: 1
+      save_top_k: 1
+      verbose: true
+      monitor: &monitor metrics/pf1/val
+    - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+    - _target_: pytorch_lightning.callbacks.EarlyStopping
+      monitor: *monitor
+      verbose: true
+      mode: *mode
+      divergence_threshold: 0.1
+      patience: 5
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: value
+  log_every_n_steps: 10
+  num_sanity_val_steps: 0
+  benchmark: true
+  max_epochs: 10
+  precision: 16
+  default_root_dir: ???
+  accumulate_grad_batches: 1
+  logger:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: rsna-breast-cancer-detection
+    job_type: training
+    log_model: all
+    save_dir: ${trainer.default_root_dir}
+datamodule:
+  _target_: mammography.src.train.DataModule
+  metadata_filepath: ???
+  image_dir: ???
+  batch_size: 23
+  prefetch_batches: 3
+  augmentation:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: torchvision.transforms.Resize
+        _convert_: object
+        size:
+          - 512
+          - 512
+      - _target_: torchvision.transforms.RandomHorizontalFlip
+      - _target_: torchvision.transforms.RandomAffine
+        _convert_: object
+        degrees: 40.0
+        translate:
+          - 0.2
+          - 0.2
+        scale:
+          - 0.8
+          - 1.2
+        shear:
+          - 0.2
+          - 0.2
+      - _target_: torchvision.transforms.CenterCrop
+        size: 512
+model:
+  _target_: mammography.src.train.Model
+  optimizer_config:
+    _target_: torch.optim.AdamW
+    lr: 1e-6
+    weight_decay: 0.2
+    _partial_: true
+  feature_extractor:
+    _target_: mammography.src.train.FeatureExtractor
+    backbone:
+      _target_: torchvision.models.densenet161
+      memory_efficient: false
+      pretrained: false
+    layer_name: flatten
+  classifier:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: torch.nn.BatchNorm1d
+        num_features: &num_features 2208
+      - _target_: torch.nn.Linear
+        in_features: *num_features
+        out_features: 1

@@ -20,7 +20,7 @@ from torchvision.transforms import RandomHorizontalFlip
 from torchvision.transforms import RandomVerticalFlip
 
 from mayo_clinic_strip_ai.find_ROIs import Rect
-from mayo_clinic_strip_ai.stain import normalize_staining
+from mayo_clinic_strip_ai.utils import normalize_background
 
 POS_CLS = "LAA"
 NEG_CLS = "CE"
@@ -35,7 +35,6 @@ class ROIDataset(Dataset):
         tif_dir: str,
         outline_dir: str,
         crop_size: int,
-        final_size: int,
         min_intersect_pct: float,
     ) -> None:
         """
@@ -68,7 +67,6 @@ class ROIDataset(Dataset):
         self.metadata = metadata
         self.random_hflip = RandomHorizontalFlip()
         self.random_vflip = RandomVerticalFlip()
-        self.final_size = final_size
         self.training = training
         self.crop_size = crop_size
         self.tif_dir = tif_dir
@@ -97,9 +95,6 @@ class ROIDataset(Dataset):
         """
         x = np.array(img.read_region(location=(crop.x, crop.y), level=0, size=(crop.w, crop.h)))
         x = cv2.cvtColor(x, cv2.COLOR_RGBA2RGB)
-        x = cv2.resize(x, dsize=(self.final_size, self.final_size), interpolation=cv2.INTER_CUBIC)
-        x, H, E = normalize_staining(x)
-        x = cv2.bitwise_not(x)
         return x
 
     def _random_crop(self, img: OpenSlide, roi: Rect) -> npt.NDArray[np.uint8]:
@@ -184,11 +179,19 @@ class ROIDataset(Dataset):
         except RuntimeError as e:
             raise RuntimeError(f"{e}\nimage: {row.to_dict()}")
         img = self.read_region(img=img, crop=Rect(x=x, y=y, w=self.crop_size, h=self.crop_size))
+
+        # img = self.read_region(img=img, crop=Rect.from_mask(outline))
+        img = normalize_background(img, I_0=np.array([row["I_0_R"], row["I_0_G"], row["I_0_B"]], dtype=img.dtype))
+        cv2.bitwise_not(src=img, dst=img)
         img = torch.from_numpy(img)
         img = img.permute(2, 0, 1)
         if self.training:
             img = self.random_hflip(img)
             img = self.random_vflip(img)
+
+        # for dim in range(1, 3):
+        #     img = img.unfold(dim, self.crop_size, self.crop_size)
+        # img = img.permute(0, 3, 4, 1, 2).flatten(start_dim=3)
         if "label" in row.keys():
             label_id = LABEL_MAP[row["label"]]
             return img, label_id

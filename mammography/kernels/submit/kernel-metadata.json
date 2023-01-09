@@ -1,0 +1,15 @@
+{
+  "id": "jakeschmidt/mammography-submit",
+  "title": "mammography-submit",
+  "code_file": "submit.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [
+    "competitions/rsna-breast-cancer-detection"
+  ],
+  "kernel_sources": []
+}

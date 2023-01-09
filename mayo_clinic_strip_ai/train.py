@@ -17,6 +17,7 @@ import torch.backends.cudnn
 from torch.jit.frontend import NotSupportedError
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchinfo import summary
 from torchvision.utils import make_grid
 
 from mayo_clinic_strip_ai.data import NEG_CLS
@@ -84,7 +85,7 @@ def train(cfg: DictConfig) -> None:
     """
     random.seed(cfg.random_seed)
     np.random.seed(cfg.random_seed)
-    torch.manual_seed(cfg.random_seed)
+    rng = torch.manual_seed(cfg.random_seed)
     # Let the pytorch backend seelct the fastest convolutional kernel
     torch.backends.cudnn.benchmark = True
 
@@ -118,9 +119,6 @@ def train(cfg: DictConfig) -> None:
     # filter ROIs with extreme aspect ratios
     train_meta.query("h / w > 1 / 12 and h / w < 12", inplace=True)
 
-    # filter blurry ROIs
-    train_meta.query("blur > 1.0", inplace=True)
-
     logger.info(f"Labels: {train_meta['label'].value_counts()}")
 
     # Create the model
@@ -134,6 +132,18 @@ def train(cfg: DictConfig) -> None:
         ),
     )
     model: Model = memory_efficient_fusion(model)  # type: ignore[no-redef]
+    with torch.autocast(device_type=device.type):
+        summary(
+            model,
+            input_data=torch.randint(
+                low=0,
+                high=255,
+                size=(cfg.hparams.data.batch_size, 3, cfg.hparams.data.crop_size, cfg.hparams.data.crop_size),
+                dtype=torch.uint8,
+            ),
+            mode="train",
+            col_names=["output_size", "num_params", "input_size"],
+        )
 
     # https://hydra.cc/docs/advanced/instantiate_objects/overview/
     optimizer: torch.optim.Optimizer = instantiate(cfg.hparams.optimizer, params=model.parameters())
@@ -159,7 +169,6 @@ def train(cfg: DictConfig) -> None:
         tif_dir=cfg.tif_dir,
         outline_dir=os.path.dirname(cfg.roi_path),
         crop_size=cfg.hparams.data.crop_size,
-        final_size=cfg.hparams.data.final_size,
         min_intersect_pct=cfg.hparams.data.min_intersect_pct,
     )
     num_workers = cpu_count()  # use all CPUs
@@ -175,6 +184,7 @@ def train(cfg: DictConfig) -> None:
         prefetch_factor=max(2, cfg.prefetch_batches * cfg.hparams.data.batch_size // num_workers),
         num_workers=num_workers,
         persistent_workers=True,
+        generator=rng,
     )
 
     # Gradient scaler is used for automatic mixed precision training

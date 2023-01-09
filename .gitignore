@@ -136,3 +136,5 @@ dmypy.json
 outputs
 *.jpeg
 .DS_Store
+
+mammography/data

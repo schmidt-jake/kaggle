@@ -1,0 +1,16 @@
+-r main.in
+
+bandit
+black
+flake8
+ipykernel
+isort
+kaggle
+matplotlib
+mypy
+pip-tools
+pip-compile-multi
+pre-commit
+pyproject-flake8
+pytest
+typeguard

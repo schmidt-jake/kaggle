@@ -61,10 +61,7 @@ class Classifier(torch.nn.Sequential):
             The dimension of the input to the classifier.
         """
         logit = torch.nn.Linear(in_features=in_features, out_features=1)
-        logit.bias = torch.nn.Parameter(
-            torch.tensor(initial_logit_bias, requires_grad=True),
-            requires_grad=True,
-        )
+        torch.nn.init.constant_(logit.bias, initial_logit_bias)
         super().__init__(torch.nn.BatchNorm1d(in_features), logit)
 
 
@@ -83,6 +80,11 @@ class Model(torch.nn.Sequential):
             A binary classifier.
         """
         super().__init__(normalizer, feature_extractor, classifier)
+        for name, m in self.named_modules():
+            if "logit" not in name and hasattr(m, "bias") and m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0.0)
+            if isinstance(m, torch.nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
 
 
 class Loss(torch.nn.Module):

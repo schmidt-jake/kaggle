@@ -20,7 +20,7 @@ import logging
 from multiprocessing.pool import Pool
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Tuple, Type
 
 import cv2
 import hydra
@@ -29,7 +29,10 @@ import numpy as np
 import numpy.typing as npt
 from omegaconf import DictConfig
 import pandas as pd
+from scipy.stats import mode
 from tqdm import tqdm
+
+from mayo_clinic_strip_ai.utils import thumbnail
 
 logger = logging.getLogger(__name__)
 
@@ -100,25 +103,6 @@ class Rect(object):
         return cropped
 
 
-# @profile
-def load_tif(filepath: str) -> npt.NDArray[np.uint8]:
-    """
-    Loads an image from a TIF file.
-
-    Parameters
-    ----------
-    filepath : str
-        The path to the TIF file
-
-    Returns
-    -------
-    npt.NDArray[np.uint8]
-        The image pixels as an array.
-    """
-    img: npt.NDArray[np.uint8] = cv2.imread(filepath, cv2.IMREAD_COLOR)
-    return img
-
-
 def threshold(img: npt.NDArray[np.uint8]) -> Tuple[float, npt.NDArray[np.uint8]]:
     thresh_otsu, mask_otsu = cv2.threshold(img, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
     thresh_tri, mask_tri = cv2.threshold(img, thresh=0, maxval=255, type=cv2.THRESH_TRIANGLE)
@@ -151,106 +135,103 @@ def get_mask(img: npt.NDArray[np.uint8], ksize: int) -> npt.NDArray[np.uint8]:
     -------
     npt.NDArray[np.uint8]
         the binary foreground mask.
-
-    Raises
-    ------
-    ImageError
-        If an appropriate foreground threshold couldn't be found.
     """
     # NOTE: (empirically) order of operations is important:
-    # 1. Convert to grayscale
-    # 2. Blur
-    # 3. Compute the foreground threshold
+    # 1. Invert colors so background is black
+    # 2. Convert to grayscale
+    # 3. Blur
+    # 4. Compute the foreground threshold
     if ksize % 2 == 0:
+        # ksize must be odd
         ksize += 1
-    # x = cv2.GaussianBlur(src=img, ksize=[ksize] * 2, sigmaX=0)
-    x = cv2.boxFilter(src=img, ksize=[ksize] * 2, ddepth=cv2.CV_8U)
-    x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY, dst=x)
-    # cv2.blur(x, ksize=(ksize, ksize), dst=x)
-    # thresh, mask = threshold(img=blur)
+    x = cv2.bitwise_not(img)  # opencv expects background to be black
+    cv2.boxFilter(src=x, ksize=[ksize] * 2, ddepth=cv2.CV_8U, dst=x)
+    x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
     cv2.threshold(x, thresh=0, maxval=255, type=cv2.THRESH_OTSU, dst=x)
-
-    # x = cv2.adaptiveThreshold(
-    #     src=x,
-    #     maxValue=255,
-    #     adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    #     thresholdType=cv2.THRESH_BINARY,
-    #     blockSize=ksize,
-    #     C=50,
-    # )
-    # if thresh == 0.0:
-    #     raise ImageError("Both Otsu and Triangle algos failed to find foreground threshold!")
-    # logger.info(f"Foreground threshold: {thresh}")
     return x
 
 
-# @profile
-def saturation_mask(img: npt.NDArray[np.uint8], ksize: int, thresh: Optional[float] = None) -> npt.NDArray[np.uint8]:
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    s = hsv[:, :, 1].copy()
-    cv2.blur(s, ksize=(ksize, ksize), dst=s)
-    cv2.threshold(s, thresh=thresh, maxval=1, type=cv2.THRESH_OTSU if thresh is None else cv2.THRESH_BINARY, dst=s)
-    return s
+def contour_border_intensity(
+    img_rgb: npt.NDArray[np.uint8],
+    contours: List[npt.NDArray[np.int32]],
+    thickness: int = 20,
+) -> npt.NDArray[np.uint8]:
+    # create a binary mask where the contour border pixels are 1 and everything else is 0
+    contour_border_mask = cv2.drawContours(
+        np.zeros_like(img_rgb), contours=contours, contourIdx=-1, color=1, thickness=thickness
+    )
+
+    # convert to float dtype so we can mask with NaNs
+    x = img_rgb.astype(np.float16)
+    x[contour_border_mask] = np.nan
+
+    # the background intensity is the mode of each channel, ignoring our NaNs
+    I_0 = mode(x.reshape(-1, 3), axis=0, nan_policy="omit", keepdims=False).mode.astype(np.uint8)
+    return I_0
 
 
-def thumbnail(img: npt.NDArray[np.uint8], max_size: int) -> npt.NDArray[np.uint8]:
-    scale_factor = max_size / max(img.shape)
-    return cv2.resize(src=img, dsize=(0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
+def is_healthy_contour(contour: npt.NDArray[np.int32], min_area: float, max_aspect_ratio: float) -> bool:
+    # filters contours that are too small (like debris)
+    # filters contours that are too skinny (like slide edges)
+    if max_aspect_ratio < 1.0:
+        raise ValueError(f"Got max_aspect_ratio less than 1.0: {max_aspect_ratio}")
+    area = cv2.contourArea(contour)
+    x, y, w, h = cv2.boundingRect(contour)
+    aspect_ratio = max(w / h, h / w)
+    return area >= min_area and aspect_ratio <= max_aspect_ratio
 
 
 def process_file(image_id: str, cfg: DictConfig, output_dir: Path) -> List[Dict[str, Any]]:
-    filepath = os.path.join(cfg.data_dir, image_id + ".tif")
+    filepath = os.path.join(cfg.data_dir, image_id + ".jpeg")
     logger.info(f"Starting on {filepath}...")
-    img = load_tif(filepath)
-    if img.dtype != np.uint8:
-        raise RuntimeError(f"Got wrong dtype: {img.dtype}")
-    if img.ndim != 3:
-        raise RuntimeError(f"Got wrong ndims: {img.ndim}")
-    if img.shape[2] != 3:
-        raise RuntimeError(f"Got wrong number of channels: {img.shape[2]}")
-    img = cv2.resize(
-        src=img,
-        dsize=(0, 0),
-        fx=1 / cfg.downscale_factor,
-        fy=1 / cfg.downscale_factor,
-        interpolation=cv2.INTER_CUBIC,
-    )
-    cv2.bitwise_not(img, dst=img)  # opencv expects background to be black
-    # sat_mask = saturation_mask(img=img, thresh=cfg.saturation_thresh, ksize=cfg.blur_ksize // cfg.downscale_factor)
-    # sat_mask = np.expand_dims(sat_mask, axis=2)
-    mask = get_mask(
-        # img=img * sat_mask,
-        img=img,
-        ksize=cfg.blur_ksize // cfg.downscale_factor,
-    )
-    contours, _ = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE)
+    img = cv2.imread(filepath, cv2.IMREAD_COLOR)
+    tissue_mask = get_mask(img, ksize=cfg.blur_ksize // cfg.downscale_factor)
+    contours: List[npt.NDArray[np.int32]] = cv2.findContours(
+        tissue_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE
+    )[0]
     contours = [c.squeeze(axis=1) for c in contours]
-    contours = [c for c in contours if cv2.contourArea(c) > cfg.min_outline_area // cfg.downscale_factor**2]
+    contours = [
+        c
+        for c in contours
+        if is_healthy_contour(c, min_area=cfg.min_outline_area, max_aspect_ratio=cfg.max_aspect_ratio)
+    ]
+    thickness = 40 // cfg.downscale_factor
+
+    I_0 = contour_border_intensity(img_rgb=img, contours=contours, thickness=thickness)
+
+    # draw thumbnails
+    img = cv2.drawContours(img, contours=contours, contourIdx=-1, color=(0, 255, 0), thickness=thickness)
+    cv2.imwrite(
+        img=thumbnail(img, max_size=1024 * 2), filename=output_dir.joinpath("thumbnails", image_id + ".jpeg").as_posix()
+    )
+    del img
+
+    # outputs
     out_dicts: List[Dict[str, Any]] = []
     if len(contours) > 0:
         logger.info(f"Found {len(contours)} outlines.")
         pth = output_dir / "outlines" / image_id
         pth.mkdir(exist_ok=False)
         for roi_num, contour in enumerate(contours):
-            np.save(pth / str(roi_num), contour * cfg.downscale_factor, allow_pickle=False)
-            roi = Rect.from_mask(contour)
+            contour *= cfg.downscale_factor
+            np.save(pth / str(roi_num), contour, allow_pickle=False)
+            x, y, w, h = cv2.boundingRect(contour)
             out_dicts.append(
                 {
                     "image_id": image_id,
                     "roi_num": roi_num,
-                    "x": roi.x,
-                    "y": roi.y,
-                    "w": roi.w,
-                    "h": roi.h,
-                    "blur": compute_blur(img=roi.crop(img=img)),
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
                     "area": cv2.contourArea(contour),
+                    # opencv uses BGR order
+                    "I_0_R": I_0[2],
+                    "I_0_G": I_0[1],
+                    "I_0_B": I_0[0],
                 }
             )
 
-        # img = np.where(np.logical_not(sat_mask), np.array((0, 0, 255), dtype=np.uint8), img)
-        img = cv2.drawContours(img, contours=contours, contourIdx=-1, color=(0, 255, 0), thickness=50)
-        img = thumbnail(img, max_size=1024)
-        cv2.imwrite(img=img, filename=(output_dir / "thumbnails" / (image_id + ".jpeg")).as_posix())
     else:
         logger.warning("No outlines found.")
     return out_dicts
@@ -272,7 +253,7 @@ def main(cfg: DictConfig):
     with (run_dir / "ROIs.csv").open(mode="w", newline="", buffering=1) as f:
         writer = DictWriter(
             f,
-            fieldnames=["image_id", "roi_num", "x", "y", "w", "h", "blur"],
+            fieldnames=["image_id", "roi_num", "x", "y", "w", "h", "area", "I_0_R", "I_0_G", "I_0_B"],
             dialect="unix",
             strict=True,
             quoting=QUOTE_NONE,
