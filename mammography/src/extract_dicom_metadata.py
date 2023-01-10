@@ -30,12 +30,12 @@ def extract_dicom_file_metadata(filepath: str) -> Dict[str, Any]:
         else:
             print(f"{filepath=}, {key=}, {type(val)=}")
         row[key] = val
-    # arr = dcm.pixel_array
-    # row["dtype"] = arr.dtype
-    # row["sharpness"] = sharpness(arr)
-    # row["pixel_min"] = arr.min()
-    # row["pixel_max"] = arr.max()
-    # row["h"], row["w"] = arr.shape
+    arr = dcm.pixel_array
+    row["dtype"] = arr.dtype
+    row["sharpness"] = sharpness(arr)
+    row["pixel_min"] = arr.min()
+    row["pixel_max"] = arr.max()
+    row["h"], row["w"] = arr.shape
     return row
 
 

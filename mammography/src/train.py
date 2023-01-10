@@ -1,6 +1,6 @@
 import logging
 from inspect import signature
-from typing import Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 import cv2
 import hydra
@@ -27,8 +27,12 @@ from torchmetrics.classification import (
     BinaryCalibrationError,
 )
 from torchvision.models.feature_extraction import create_feature_extractor
+from torchvision.utils import make_grid
 
-from mammography.src.utils import dicom2numpy
+from mammography.src import utils
+
+if TYPE_CHECKING:
+    from pytorch_lightning.loggers import WandbLogger
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +93,11 @@ class DataframeDataPipe(Dataset):
     @staticmethod
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
-            arr = dicom2numpy(filepath)
+            arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
+            dcm.BitsStored = utils.get_suspected_bit_depth(arr)
+            arr = utils.maybe_invert(arr=arr, dcm=dcm)
+            arr = utils.maybe_flip_left(arr=arr)
+            arr = utils.convert_to_uint8(arr=arr, dcm=dcm)
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         else:
@@ -145,15 +153,27 @@ class DataModule(pl.LightningDataModule):
 
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
+        self.df.query("patient_id != 27770", inplace=True)
+        self.df.query("image_id != 1942326353", inplace=True)
         if stage == "fit":
-            self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
+            # self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
+            self.df["filepath"] = (
+                self.image_dir
+                + "/"
+                + "train_images"
+                + "/"
+                + self.df["patient_id"].astype(str)
+                + "/"
+                + self.df["image_id"].astype(str)
+                + ".dcm"
+            )
             class_weights = 1.0 / self.df["cancer"].value_counts()
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
         elif stage == "predict":
             self.df["filepath"] = (
                 self.image_dir
                 + "/"
-                + f"{stage}_images"
+                + "predict_images"
                 + "/"
                 + self.df["patient_id"].astype(str)
                 + "/"
@@ -209,6 +229,7 @@ class Model(pl.LightningModule):
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
         super().__init__()
+        self.logger: "WandbLogger"
         self.feature_extractor = feature_extractor
         self.classifier = classifier
         self.train_metrics = MetricCollection(
@@ -292,6 +313,14 @@ class Model(pl.LightningModule):
         #     },
         #     step=self.global_step,
         # )
+        if batch_idx == 0:
+            self.logger.log_image(
+                key="input_batch",
+                images=make_grid(batch["pixels"]),
+                step=self.global_step,
+                mode="L",
+            )
+
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
         self.train_metrics(preds=preds, target=batch["cancer"])
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]

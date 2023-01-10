@@ -45,27 +45,27 @@ datamodule:
         size:
           - 512
           - 512
-      - _target_: torchvision.transforms.RandomHorizontalFlip
-      - _target_: torchvision.transforms.RandomAffine
-        _convert_: object
-        degrees: 40.0
-        translate:
-          - 0.2
-          - 0.2
-        scale:
-          - 0.8
-          - 1.2
-        shear:
-          - 0.2
-          - 0.2
-      - _target_: torchvision.transforms.CenterCrop
-        size: 512
+      # - _target_: torchvision.transforms.RandomHorizontalFlip
+      # - _target_: torchvision.transforms.RandomAffine
+      #   _convert_: object
+      #   degrees: 40.0
+      #   translate:
+      #     - 0.2
+      #     - 0.2
+      #   scale:
+      #     - 0.8
+      #     - 1.2
+      #   shear:
+      #     - 0.2
+      #     - 0.2
+      # - _target_: torchvision.transforms.CenterCrop
+      #   size: 512
 model:
   _target_: mammography.src.train.Model
   optimizer_config:
-    _target_: torch.optim.AdamW
+    _target_: torch.optim.SGD
     lr: 1e-6
-    weight_decay: 0.2
+    weight_decay: 0.0
     _partial_: true
   feature_extractor:
     _target_: mammography.src.train.FeatureExtractor
