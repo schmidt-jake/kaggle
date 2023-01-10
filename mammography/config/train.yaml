@@ -31,6 +31,9 @@ trainer:
     job_type: training
     log_model: all
     save_dir: ${trainer.default_root_dir}
+    settings:
+      _target_: wandb.Settings
+      code_dir: "."
 datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???
