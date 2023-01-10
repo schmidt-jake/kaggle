@@ -43,10 +43,10 @@ def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
     return arr
 
 
-def convert_to_uint8(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
-    arr = arr / (2**dcm.BitsStored - 1)
-    arr = arr * (2**8 - 1)
-    return arr.astype(np.uint8)
+def convert_to_uint8(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray[np.uint8]:
+    scale_factor = (2**8 - 1) / (2**dcm.BitsStored - 1)
+    arr = arr.astype(np.float32) * scale_factor
+    return np.rint(arr, dtype=np.uint8)
 
 
 def dicom2numpy(
