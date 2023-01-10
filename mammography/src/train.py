@@ -160,8 +160,6 @@ class DataModule(pl.LightningDataModule):
             self.df["filepath"] = (
                 self.image_dir
                 + "/"
-                + "train_images"
-                + "/"
                 + self.df["patient_id"].astype(str)
                 + "/"
                 + self.df["image_id"].astype(str)
@@ -172,8 +170,6 @@ class DataModule(pl.LightningDataModule):
         elif stage == "predict":
             self.df["filepath"] = (
                 self.image_dir
-                + "/"
-                + "predict_images"
                 + "/"
                 + self.df["patient_id"].astype(str)
                 + "/"
@@ -313,7 +309,7 @@ class Model(pl.LightningModule):
         #     },
         #     step=self.global_step,
         # )
-        if batch_idx == 0:
+        if batch_idx == 0 and self.current_epoch == 0:
             self.logger.log_image(
                 key="input_batch",
                 images=make_grid(batch["pixels"]),

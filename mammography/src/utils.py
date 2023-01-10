@@ -19,9 +19,9 @@ def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train
     image_id = str(image_id)
     for filepath in glob(glob_pattern):
         if image_id in filepath:
-            logger.info(f"Found {filepath=}")
+            logger.info(f"Found filepath={filepath}")
             return filepath
-    raise ValueError(f"Found no {filepath=}")
+    raise ValueError(f"Found no filepath={filepath}")
 
 
 def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
@@ -85,14 +85,14 @@ def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[in
         axes_pad=(0.0, 0.0),  # pad between axes in inches
     )
     grid[0].imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
-    grid[0].set_title(f"Raw\n{arr.min()=}\n{arr.max()=}\n{arr.dtype=}\n{dcm.BitsStored=}", fontsize="small")
+    grid[0].set_title(f"Raw\nmin={arr.min()}\nmax={arr.max()}\ndtype={arr.dtype}\nBitsStored={dcm.BitsStored}", fontsize="small")
     for ax, (index, window) in zip(grid[1:], windows.iterrows()):
         windowed = apply_windowing(arr=arr.copy(), ds=dcm, index=index)
         ax.imshow(windowed, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
         title = "\n".join(
             [
-                f"{window['center']=}",
-                f"{window['width']=}",
+                f"window center={window['center']}",
+                f"window width{window['width']}",
                 f"{windowed.min()=:.2f}",
                 f"{windowed.max()=:.2f}",
                 f"{windowed.dtype}",
@@ -139,7 +139,7 @@ def plot_samples(
             if dcm.PhotometricInterpretation == "MONOCHROME1":
                 title += "\nMONOCHROME CORRECTED"
             if hasattr(dcm, "WindowCenter"):
-                title += f"\n{dcm.WindowCenter=}"
+                title += f"\nwindow center={dcm.WindowCenter}"
             if hasattr(dcm, "WindowWidth"):
-                title += f"\n{dcm.WindowWidth=}"
+                title += f"window width=\n{dcm.WindowWidth}"
             a.set_title(title, fontsize="small")
