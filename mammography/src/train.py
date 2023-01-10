@@ -312,7 +312,7 @@ class Model(pl.LightningModule):
         if batch_idx == 0 and self.current_epoch == 0:
             self.logger.log_image(
                 key="input_batch",
-                images=[make_grid(batch["pixels"].detach().squeeze(dim=1)).cpu().numpy()],
+                images=[make_grid(batch["pixels"].detach())[0, :, :].cpu().numpy()],
                 step=self.global_step,
                 mode="L",
             )
