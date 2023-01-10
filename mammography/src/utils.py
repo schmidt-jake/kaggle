@@ -85,7 +85,9 @@ def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[in
         axes_pad=(0.0, 0.0),  # pad between axes in inches
     )
     grid[0].imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
-    grid[0].set_title(f"Raw\nmin={arr.min()}\nmax={arr.max()}\ndtype={arr.dtype}\nBitsStored={dcm.BitsStored}", fontsize="small")
+    grid[0].set_title(
+        f"Raw\nmin={arr.min()}\nmax={arr.max()}\ndtype={arr.dtype}\nBitsStored={dcm.BitsStored}", fontsize="small"
+    )
     for ax, (index, window) in zip(grid[1:], windows.iterrows()):
         windowed = apply_windowing(arr=arr.copy(), ds=dcm, index=index)
         ax.imshow(windowed, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
@@ -93,8 +95,8 @@ def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[in
             [
                 f"window center={window['center']}",
                 f"window width{window['width']}",
-                f"{windowed.min()=:.2f}",
-                f"{windowed.max()=:.2f}",
+                f"min={windowed.min():.2f}",
+                f"max={windowed.max():.2f}",
                 f"{windowed.dtype}",
             ]
         )
