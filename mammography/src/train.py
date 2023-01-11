@@ -105,7 +105,7 @@ class DataframeDataPipe(Dataset):
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
         pixels = torch.from_numpy(arr).unsqueeze(dim=0)
-        pixels = utils.crop_right_center(pixels, size=1024)
+        pixels = utils.crop_right_center(pixels, size=2048)
         pixels = functional_tensor.resize(pixels, size=512)
         # d["pixels"] = self.augmentation(pixels)
         d["pixels"] = pixels

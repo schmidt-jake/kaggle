@@ -1,14 +1,13 @@
 from pathlib import Path
 from typing import Any, Dict
 
-import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from pytest import MonkeyPatch
-from torchmetrics import MetricCollection
+from tqdm import tqdm
 
 from mammography.src.train import ProbabilisticBinaryF1Score, train
 
@@ -62,7 +61,7 @@ def test_datamodule(monkeypatch: MonkeyPatch) -> None:
         datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
         datamodule.setup(stage="fit")
         dataloader = datamodule.train_dataloader()
-        for batch in dataloader:
+        for batch in tqdm(dataloader):
             assert "pixels" in batch.keys()
             assert "cancer" in batch.keys()
             assert batch["pixels"].shape == (cfg.datamodule.batch_size, 1, 512, 512)
