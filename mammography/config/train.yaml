@@ -10,6 +10,7 @@ trainer:
       verbose: true
       monitor: &monitor metrics/pf1/val
     - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+      refresh_rate: 1
     - _target_: pytorch_lightning.callbacks.EarlyStopping
       monitor: *monitor
       verbose: true
@@ -29,11 +30,11 @@ trainer:
     _target_: pytorch_lightning.loggers.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
-    log_model: all
+    log_model: true
     save_dir: ${trainer.default_root_dir}
     settings:
       _target_: wandb.Settings
-      code_dir: "."
+      code_dir: /kaggle/working/kaggle
 datamodule:
   _target_: mammography.src.train.DataModule
   metadata_filepath: ???
@@ -68,6 +69,7 @@ model:
   optimizer_config:
     _target_: torch.optim.SGD
     lr: 1e-6
+    momentum: 0.9
     weight_decay: 0.0
     _partial_: true
   feature_extractor:

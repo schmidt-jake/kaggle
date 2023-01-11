@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
 from pydicom import FileDataset, dcmread
 from pydicom.multival import MultiValue
 from pydicom.pixel_data_handlers.util import apply_windowing
+from torchvision.transforms import functional_tensor
 
 logger = getLogger(__name__)
 
@@ -43,7 +45,24 @@ def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
     return arr
 
 
-def convert_to_uint8(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray[np.uint8]:
+def scale_to_01(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.float32]:
+    arr = arr.astype(np.float32) / (2**dcm.BitsStored - 1)
+    return arr
+
+
+def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
+    """
+    Takes a crop that is on the right side of the arr, horizontally center.
+    If needed, adds padding to the left, top, and bottom.
+    """
+    w, h = functional_tensor.get_image_size(img)
+    top = (h - size) // 2
+    left = w - size
+    cropped = functional_tensor.crop(img=img, top=top, left=left, height=size, width=size)
+    return cropped
+
+
+def convert_to_uint8(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.uint8]:
     scale_factor = (2**8 - 1) / (2**dcm.BitsStored - 1)
     arr = arr.astype(np.float32) * scale_factor
     return np.rint(arr).astype(np.uint8)

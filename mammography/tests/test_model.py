@@ -47,13 +47,14 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 
 
 def test_datamodule(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
+    # monkeypatch.setattr("mammography.src.train.dicom2numpy", data_patch)
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
     with initialize(version_base=None, config_path="../config"):
         cfg = compose(
             config_name="train",
             overrides=[
-                "datamodule.image_dir=mammography/data/uint8_crops/png",
+                # "datamodule.image_dir=mammography/data/uint8_crops/png",
+                "datamodule.image_dir=mammography/data/raw/train_images",
                 "datamodule.metadata_filepath=mammography/data/raw/train.csv",
                 "datamodule.prefetch_batches=0",
             ],

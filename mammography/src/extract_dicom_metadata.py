@@ -62,7 +62,7 @@ def extract_dicom_file_metadata(filepath: str) -> Dict[str, Any]:
 
 def main() -> None:
     filepaths = glob("mammography/data/raw/train_images/*/*.dcm")
-    filepaths = np.random.choice(filepaths, size=1000, replace=False)
+    # filepaths = np.random.choice(filepaths, size=1000, replace=False)
     with Pool() as pool:
         meta = pool.map(
             extract_dicom_file_metadata,

@@ -10,8 +10,6 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
-
-# from functorch.compile import memory_efficient_fusion
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
@@ -27,7 +25,7 @@ from torchmetrics.classification import (
     BinaryCalibrationError,
 )
 from torchvision.models.feature_extraction import create_feature_extractor
-from torchvision.utils import make_grid
+from torchvision.transforms import functional_tensor
 
 from mammography.src import utils
 
@@ -72,12 +70,9 @@ class FeatureExtractor(torch.nn.Module):
         self.feature_extractor = create_feature_extractor(model=backbone, return_nodes=[self.layer_name])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.is_cuda:
-            x = x.half()
-        else:
-            x = x.float()
-        # x /= 65534.0  # 2 ** 16 - 1
-        x /= 255.0  # 2 ** 8 - 1
+        # x = x.float()
+        # # x /= 65534.0  # 2 ** 16 - 1
+        # x /= 255.0  # 2 ** 8 - 1
         return self.feature_extractor(x)[self.layer_name]
 
 
@@ -94,10 +89,10 @@ class DataframeDataPipe(Dataset):
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
             arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
-            dcm.BitsStored = utils.get_suspected_bit_depth(arr)
+            # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
             arr = utils.maybe_invert(arr=arr, dcm=dcm)
             arr = utils.maybe_flip_left(arr=arr)
-            arr = utils.convert_to_uint8(arr=arr, dcm=dcm)
+            arr = utils.scale_to_01(arr=arr, dcm=dcm)
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         else:
@@ -110,7 +105,10 @@ class DataframeDataPipe(Dataset):
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
         pixels = torch.from_numpy(arr).unsqueeze(dim=0)
-        d["pixels"] = self.augmentation(pixels)
+        pixels = utils.crop_right_center(pixels, size=1024)
+        pixels = functional_tensor.resize(pixels, size=512)
+        # d["pixels"] = self.augmentation(pixels)
+        d["pixels"] = pixels
         d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
         return d
 
@@ -188,8 +186,9 @@ class DataModule(pl.LightningDataModule):
             sampler=WeightedRandomSampler(
                 weights=self.df["sample_weight"],
                 num_samples=len(self.df),
-                replacement=False,
+                replacement=True,
             ),
+            drop_last=True,  # True to avoid retriggering CuDNN benchmarking
         )
         # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
         # pipe = pipe.in_memory_cache()
@@ -211,6 +210,7 @@ class DataModule(pl.LightningDataModule):
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch,
+            drop_last=False,
         )
 
     def predict_dataloader(self) -> DataLoader:
@@ -309,12 +309,13 @@ class Model(pl.LightningModule):
         #     },
         #     step=self.global_step,
         # )
-        if batch_idx == 0 and self.current_epoch == 0:
+        if self.global_step == 0 and self.global_rank == 0:
+            pixels: npt.NDArray[np.float32] = batch["pixels"].detach().cpu().numpy()
             self.logger.log_image(
                 key="input_batch",
-                images=[make_grid(batch["pixels"].detach())[0, :, :].cpu().numpy()],
+                images=[pixels[i, 0, :, :] for i in range(pixels.shape[0])],
                 step=self.global_step,
-                mode="L",
+                mode=["L"] * pixels.shape[0],
             )
 
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
@@ -351,12 +352,12 @@ def train(cfg: DictConfig) -> None:
     datamodule: DataModule = instantiate(cfg.datamodule)
     model: pl.LightningModule = instantiate(cfg.model)
     trainer.logger.log_hyperparams(cfg)
-    # trainer.logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
+    trainer.logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")
         profile_art.add_dir(trainer.profiler.dirpath)
-        profile_art.save()
+        trainer.logger.experiment.log_artifact(profile_art)
 
 
 if __name__ == "__main__":
