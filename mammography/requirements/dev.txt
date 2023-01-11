@@ -92,7 +92,7 @@ parso==0.8.3
     # via jedi
 pathspec==0.10.3
     # via black
-pbr==5.11.0
+pbr==5.11.1
     # via stevedore
 pep517==0.13.0
     # via build
@@ -153,7 +153,7 @@ tomli==2.0.1
     #   pep517
     #   pyproject-flake8
     #   pytest
-toposort==1.8
+toposort==1.9
     # via pip-compile-multi
 tornado==6.2
     # via
