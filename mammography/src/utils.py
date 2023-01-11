@@ -118,13 +118,13 @@ def plot_samples(
         nrows_ncols=(len(args), n),
         axes_pad=(0.0, 1.0),  # pad between axes in inches
     )
-    for (df, vmax_base2, should_apply_voi_lut), ax in zip(args, grid.axes_row):
+    for (df, vmax_base2, should_apply_window_fn), ax in zip(args, grid.axes_row):
         if unique_patients:
-            df = df.groupby("patient_id").sample(n=1, random_seed=random_seed)
-        sample = df.sample(n=n, random_seed=random_seed)
+            df = df.groupby("patient_id").sample(n=1, random_state=random_seed)
+        sample = df.sample(n=n, random_state=random_seed)
         for a, row in zip(ax, sample.to_dict("records")):
             filepath = find_filepath(row["image_id"])
-            arr, dcm = dicom2numpy(filepath, should_apply_voi_lut=should_apply_voi_lut)
+            arr, dcm = dicom2numpy(filepath, should_apply_window_fn=should_apply_window_fn)
             # arr = cv2.resize(arr, (256, 256))
             a.imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
             title = "\n".join(
