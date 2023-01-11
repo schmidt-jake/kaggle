@@ -52,8 +52,8 @@ def extract_dicom_file_metadata(filepath: str) -> Dict[str, Any]:
         row[key] = val
     arr = dcm.pixel_array
     arr = utils.maybe_invert(arr=arr, dcm=dcm)
-    # row["dtype"] = arr.dtype
-    # row["sharpness"] = sharpness(arr)
+    row["dtype"] = arr.dtype
+    row["sharpness"] = sharpness(arr)
     row["pixel_min"] = arr.min()
     row["pixel_max"] = arr.max()
     row["h"], row["w"] = arr.shape
@@ -63,7 +63,7 @@ def extract_dicom_file_metadata(filepath: str) -> Dict[str, Any]:
 def main() -> None:
     filepaths = glob("mammography/data/raw/train_images/*/*.dcm")
     filepaths = np.random.choice(filepaths, size=1000, replace=False)
-    with Pool(8) as pool:
+    with Pool() as pool:
         meta = pool.map(
             extract_dicom_file_metadata,
             tqdm(filepaths, smoothing=0),
@@ -75,7 +75,7 @@ def main() -> None:
     meta["pixel_max_base2"] = np.log2(meta["pixel_max"] + 1)
     meta.eval("aspect_ratio = h / w", inplace=True)
     meta.sort_values("image_id", inplace=True, ignore_index=True)
-    meta.to_pickle("mammography/dicom_metadata-dev.pickle")
+    meta.to_pickle("mammography/dicom_metadata.pickle")
 
 
 if __name__ == "__main__":
