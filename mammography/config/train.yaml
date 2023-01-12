@@ -17,6 +17,8 @@ trainer:
       mode: *mode
       divergence_threshold: 0.1
       patience: 5
+    - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+      log_momentum: true
   gradient_clip_val: 1.0
   gradient_clip_algorithm: value
   log_every_n_steps: 10

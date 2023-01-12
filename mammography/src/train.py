@@ -95,7 +95,7 @@ class DataframeDataPipe(Dataset):
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
-        pixels = torch.from_numpy(arr)
+        pixels = torch.from_numpy(arr.astype(np.float32))
         _min, _max = pixels.min(), pixels.max()
         pixels -= _min
         pixels /= _max - _min
