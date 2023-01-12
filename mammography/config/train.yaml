@@ -69,6 +69,7 @@ datamodule:
 model:
   _target_: mammography.src.train.Model
   optimizer_config:
+    _convert_: all
     optimizer:
       _target_: torch.optim.SGD
       lr: 1e-6

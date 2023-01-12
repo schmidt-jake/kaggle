@@ -12,7 +12,7 @@ import torch
 import wandb
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from pydicom.pixel_data_handlers.util import apply_windowing
 from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
@@ -362,7 +362,7 @@ class Model(pl.LightningModule):
                 optimizer=config["optimizer"], total_steps=self.trainer.estimated_stepping_batches
             )
         del self.optimizer_config
-        return OmegaConf.to_container(config)
+        return config
 
     def optimizer_zero_grad(
         self, epoch: int, batch_idx: int, optimizer: torch.optim.Optimizer, optimizer_idx: int
