@@ -51,7 +51,7 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
 
 def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
     if dcm.PhotometricInterpretation == "MONOCHROME1":
-        logger.info("Applying MONOCHROME1 correction")
+        # logger.info("Applying MONOCHROME1 correction")
         arr = 2**dcm.BitsStored - 1 - arr
     return arr
 

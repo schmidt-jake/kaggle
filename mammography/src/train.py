@@ -78,10 +78,19 @@ class DataframeDataPipe(Dataset):
             arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
             windows = utils.get_unique_windows(dcm)
             if not windows.empty:
-                bit_depth = utils.get_suspected_bit_depth(arr)
-                if bit_depth != dcm.BitsStored:
-                    logger.warning(f"Got bad bit depth for {filepath}")
-                    arr = utils.to_bit_depth(arr, src_depth=bit_depth, dest_depth=dcm.BitsStored)
+                window_index = np.random.choice(windows.index)
+                window = windows.loc[window_index]
+                if window["center"] + window["width"] // 2 > arr.max():
+                    logger.warning(
+                        f"Got invalid window: center={window['center']}, width={window['width']}, pixel_max={arr.max()}"
+                        "\nattempting to fix..."
+                    )
+                    bit_depth = utils.get_suspected_bit_depth(arr)
+                    if bit_depth != dcm.BitsStored:
+                        logger.warning(f"Got bad bit depth for {filepath}")
+                        arr = utils.to_bit_depth(arr, src_depth=bit_depth, dest_depth=dcm.BitsStored)
+                    else:
+                        logger.warning("Couldn't fix it!")
                 windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
                 if windowed_arr.ptp() > 10:
                     arr = windowed_arr
