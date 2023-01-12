@@ -13,18 +13,20 @@ import wandb
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig, OmegaConf
+from pydicom.pixel_data_handlers.util import apply_windowing
 from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 # from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
 # from torchdata.datapipes.map import MapDataPipe
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import MeanMetric, Metric, MetricCollection
 from torchmetrics.classification import (
     BinaryAccuracy,
     BinaryAUROC,
     BinaryCalibrationError,
 )
 from torchvision.transforms import functional_tensor
+from wandb.data_types import Classes
 
 from mammography.src import utils
 
@@ -80,6 +82,9 @@ class DataframeDataPipe(Dataset):
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
             arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
+            windows = utils.get_unique_windows(dcm)
+            if not windows.empty:
+                arr = apply_windowing(arr=arr, ds=dcm, index=np.random.choice(windows.index))
             # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
             arr = utils.maybe_invert(arr=arr, dcm=dcm)
             arr = utils.maybe_flip_left(arr=arr)
@@ -238,6 +243,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
+                "loss": MeanMetric(nan_strategy="error"),
                 # "predictions": CatMetric(nan_strategy="error"),
             },
             prefix="metrics/",
@@ -247,6 +253,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
+                "loss": MeanMetric(nan_strategy="error"),
                 # "roc": BinaryROC(validate_args=False),
                 "auroc": BinaryAUROC(validate_args=False),
                 "calibration_error": BinaryCalibrationError(validate_args=False),
@@ -320,15 +327,17 @@ class Model(pl.LightningModule):
         # )
         if self.global_step == 0 and self.global_rank == 0:
             pixels: npt.NDArray[np.float32] = batch["pixels"].detach().cpu().numpy()
+            cancer = batch["cancer"].detach().cpu().numpy()
             self.logger.log_image(
                 key="input_batch",
                 images=[pixels[i, 0, :, :] for i in range(pixels.shape[0])],
                 step=self.global_step,
                 mode=["L"] * pixels.shape[0],
+                classes=[Classes([{"id": c, "name": "cancer" if c == 1 else "no-cancer"}]) for c in cancer],
             )
 
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
-        self.train_metrics(preds=preds, target=batch["cancer"])
+        self.train_metrics(preds=preds, target=batch["cancer"], value=loss)
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
@@ -337,9 +346,8 @@ class Model(pl.LightningModule):
         preds = logit.sigmoid()
         # self.logger.experiment.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
-        self.val_metrics(preds=preds, target=batch["cancer"])
+        self.val_metrics(preds=preds, target=batch["cancer"], value=loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
-        return {"loss": loss}
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
         logit: torch.Tensor = self(batch["pixels"])

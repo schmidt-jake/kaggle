@@ -12,9 +12,20 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from pydicom import FileDataset, dcmread
 from pydicom.multival import MultiValue
 from pydicom.pixel_data_handlers.util import apply_windowing
+from torchvision.models.feature_extraction import get_graph_node_names
 from torchvision.transforms import functional_tensor
 
 logger = getLogger(__name__)
+
+
+def inspect_module(module: torch.nn.Module) -> None:
+    train_nodes, eval_nodes = get_graph_node_names(module)
+    for node in train_nodes:
+        try:
+            m = module.get_submodule(node)
+            print(node, m)
+        except AttributeError:
+            print(node)
 
 
 def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train_images/*/*.dcm") -> str:
@@ -89,14 +100,19 @@ def get_suspected_bit_depth(arr: npt.NDArray) -> int:
     return suspected_bit_depth
 
 
-def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[int] = None) -> None:
-    fig = plt.figure(figsize=(20, 20))
+def get_unique_windows(dcm: FileDataset) -> pd.DataFrame:
     center, width = dcm.get("WindowCenter", None), dcm.get("WindowWidth", None)
     if not (isinstance(center, MultiValue) and isinstance(width, MultiValue)):
         center, width = [center], [width]
     windows = pd.DataFrame({"center": center, "width": width})
     windows.dropna(inplace=True)
     windows.drop_duplicates(inplace=True)
+    return windows
+
+
+def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[int] = None) -> None:
+    fig = plt.figure(figsize=(20, 20))
+    windows = get_unique_windows(dcm)
     grid = ImageGrid(
         fig=fig,
         rect=111,  # similar to subplot(111)
