@@ -12,7 +12,7 @@ import torch
 import wandb
 from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
@@ -24,7 +24,6 @@ from torchmetrics.classification import (
     BinaryAUROC,
     BinaryCalibrationError,
 )
-from torchvision.models.feature_extraction import create_feature_extractor
 from torchvision.transforms import functional_tensor
 
 from mammography.src import utils
@@ -62,18 +61,10 @@ class ProbabilisticBinaryF1Score(Metric):
         return result
 
 
-class FeatureExtractor(torch.nn.Module):
-    def __init__(self, backbone: torch.nn.Module, layer_name: str) -> None:
-        super().__init__()
-        self.layer_name = layer_name
-        backbone.features[0] = replace_layer(backbone.features[0], in_channels=1)  # type: ignore[assignment,index,operator]
-        self.feature_extractor = create_feature_extractor(model=backbone, return_nodes=[self.layer_name])
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x = x.float()
-        # # x /= 65534.0  # 2 ** 16 - 1
-        # x /= 255.0  # 2 ** 8 - 1
-        return self.feature_extractor(x)[self.layer_name]
+class FeatureExtractor(torch.nn.Sequential):
+    def __init__(self, backbone: torch.nn.Module, **module_replacements: Dict[str, Any]) -> None:
+        replace_submodules(backbone, **module_replacements)
+        super().__init__(backbone)
 
 
 class DataframeDataPipe(Dataset):
@@ -92,7 +83,7 @@ class DataframeDataPipe(Dataset):
             # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
             arr = utils.maybe_invert(arr=arr, dcm=dcm)
             arr = utils.maybe_flip_left(arr=arr)
-            arr = utils.scale_to_01(arr=arr, dcm=dcm)
+            # arr = utils.scale_to_01(arr=arr, dcm=dcm)
         elif filepath.endswith(".png"):
             arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         else:
@@ -104,7 +95,11 @@ class DataframeDataPipe(Dataset):
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
-        pixels = torch.from_numpy(arr).unsqueeze(dim=0)
+        pixels = torch.from_numpy(arr)
+        _min, _max = pixels.min(), pixels.max()
+        pixels -= _min
+        pixels /= _max - _min
+        pixels.unsqueeze_(dim=0)
         pixels = utils.crop_right_center(pixels, size=2048)
         pixels = functional_tensor.resize(pixels, size=512)
         # d["pixels"] = self.augmentation(pixels)
@@ -117,7 +112,18 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
     class_signature = signature(layer_to_replace.__class__).parameters
     layer_params = {k: getattr(layer_to_replace, k) for k in class_signature.keys() if hasattr(layer_to_replace, k)}
     layer_params.update(new_layer_kwargs)
+    if "bias" in layer_params.keys() and isinstance(layer_params["bias"], torch.Tensor):
+        layer_params["bias"] = True
     return type(layer_to_replace)(**layer_params)
+
+
+def replace_submodules(module: torch.nn.Module, **replacement_kwargs: Dict[str, Any]) -> None:
+    for target, replacement in replacement_kwargs.items():
+        parent_name, _, child_name = target.rpartition(".")
+        parent = module.get_submodule(parent_name)
+        child = parent.get_submodule(child_name)
+        new_child = replace_layer(child, **replacement)
+        setattr(parent, child_name, new_child)
 
 
 def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -270,6 +276,9 @@ class Model(pl.LightningModule):
         return np.log(p / (1 - p))
 
     def setup(self, stage: str) -> None:
+        self.example_input_array = torch.rand(
+            size=(self.trainer.datamodule.batch_size, 1, 512, 512), dtype=torch.float32
+        )
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
@@ -291,7 +300,7 @@ class Model(pl.LightningModule):
         # features: torch.Tensor = checkpoint_sequential(
         #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
         # )
-        features = self.feature_extractor(x)
+        features: torch.Tensor = self.feature_extractor(x)
         predictions: torch.Tensor = self.classifier(features)
         # predictions: torch.Tensor = checkpoint_sequential(
         #     self.classifier, segments=2, input=features, preserve_rng_state=False
@@ -337,7 +346,16 @@ class Model(pl.LightningModule):
         return logit.sigmoid()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        return self.optimizer_config(params=self.parameters())
+        config = self.optimizer_config
+        config["optimizer"] = config["optimizer"](params=self.parameters())
+        try:
+            config["lr_scheduler"]["scheduler"] = config["lr_scheduler"]["scheduler"](optimizer=config["optimizer"])
+        except ValueError:
+            config["lr_scheduler"]["scheduler"] = config["lr_scheduler"]["scheduler"](
+                optimizer=config["optimizer"], total_steps=self.trainer.estimated_stepping_batches
+            )
+        del self.optimizer_config
+        return OmegaConf.to_container(config)
 
     def optimizer_zero_grad(
         self, epoch: int, batch_idx: int, optimizer: torch.optim.Optimizer, optimizer_idx: int

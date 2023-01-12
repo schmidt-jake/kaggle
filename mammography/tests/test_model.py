@@ -13,14 +13,15 @@ from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
 def data_patch(index: int) -> Dict[str, Any]:
-    return {"pixels": torch.randint(size=(1, 512, 512), low=0, high=255, dtype=torch.uint8), "cancer": 0}
+    # return {"pixels": torch.randint(size=(1, 512, 512), low=0, high=255, dtype=torch.uint8), "cancer": 0}
+    return {"pixels": torch.rand(size=(1, 512, 512), dtype=torch.float32), "cancer": 0}
 
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
     monkeypatch.setattr(
         "pandas.read_csv",
-        lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0}] * 2),
+        lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0, "patient_id": 0}] * 2),
     )
     monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
     with initialize(version_base=None, config_path="../config"):

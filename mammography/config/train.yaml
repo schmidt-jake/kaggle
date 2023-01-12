@@ -67,23 +67,25 @@ datamodule:
 model:
   _target_: mammography.src.train.Model
   optimizer_config:
-    _target_: torch.optim.SGD
-    lr: 1e-6
-    momentum: 0.9
-    weight_decay: 0.0
-    _partial_: true
+    optimizer:
+      _target_: torch.optim.SGD
+      lr: 1e-6
+      momentum: 0.9
+      weight_decay: 0.0
+      _partial_: true
+    lr_scheduler:
+      scheduler:
+        _target_: torch.optim.lr_scheduler.ConstantLR
+        _partial_: true
+        factor: 1.0
+      interval: step
   feature_extractor:
     _target_: mammography.src.train.FeatureExtractor
     backbone:
       _target_: torchvision.models.densenet161
-      memory_efficient: false
-      pretrained: false
-    layer_name: flatten
+      drop_rate: 0.0
+      num_classes: 1
+    features.conv0:
+      in_channels: 1
   classifier:
     _target_: torch.nn.Sequential
-    _args_:
-      - _target_: torch.nn.BatchNorm1d
-        num_features: &num_features 2208
-      - _target_: torch.nn.Linear
-        in_features: *num_features
-        out_features: 1
