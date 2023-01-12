@@ -33,8 +33,8 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     # Standardize image laterality using pixel values b/c ImageLaterality meta is inaccurate
     w = arr.shape[1]
     if arr[:, : w // 2].sum() > arr[:, w // 2 :].sum():
-        # if dcm.ImageLaterality == "R":
-        arr = np.flip(arr, axis=1)
+        # `copy()` to avoid negative stride (https://discuss.pytorch.org/t/torch-from-numpy-not-support-negative-strides/3663)
+        arr = np.flip(arr, axis=1).copy()
     return arr
 
 
