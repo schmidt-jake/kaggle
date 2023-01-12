@@ -82,8 +82,8 @@ model:
         factor: 1.0
       interval: step
   feature_extractor:
-    _target_: mammography.src.train.FeatureExtractor
-    backbone:
+    _target_: mammography.src.train.replace_submodules
+    module:
       _target_: torchvision.models.densenet161
       drop_rate: 0.0
       num_classes: 1

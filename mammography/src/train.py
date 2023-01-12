@@ -63,12 +63,6 @@ class ProbabilisticBinaryF1Score(Metric):
         return result
 
 
-class FeatureExtractor(torch.nn.Sequential):
-    def __init__(self, backbone: torch.nn.Module, **module_replacements: Dict[str, Any]) -> None:
-        replace_submodules(backbone, **module_replacements)
-        super().__init__(backbone)
-
-
 class DataframeDataPipe(Dataset):
     def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential) -> None:
         super().__init__()
@@ -84,7 +78,11 @@ class DataframeDataPipe(Dataset):
             arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
             windows = utils.get_unique_windows(dcm)
             if not windows.empty:
-                arr = apply_windowing(arr=arr, ds=dcm, index=np.random.choice(windows.index))
+                windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
+                if windowed_arr.ptp() > 10:
+                    arr = windowed_arr
+                else:
+                    logger.warning(f"Got bad window for {filepath}")
             # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
             arr = utils.maybe_invert(arr=arr, dcm=dcm)
             arr = utils.maybe_flip_left(arr=arr)
@@ -122,13 +120,14 @@ def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torc
     return type(layer_to_replace)(**layer_params)
 
 
-def replace_submodules(module: torch.nn.Module, **replacement_kwargs: Dict[str, Any]) -> None:
+def replace_submodules(module: torch.nn.Module, **replacement_kwargs: Dict[str, Any]) -> torch.nn.Module:
     for target, replacement in replacement_kwargs.items():
         parent_name, _, child_name = target.rpartition(".")
         parent = module.get_submodule(parent_name)
         child = parent.get_submodule(child_name)
         new_child = replace_layer(child, **replacement)
         setattr(parent, child_name, new_child)
+    return module
 
 
 def select_dict_keys(input_dict: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -231,7 +230,7 @@ class DataModule(pl.LightningDataModule):
 class Model(pl.LightningModule):
     def __init__(
         self,
-        feature_extractor: FeatureExtractor,
+        feature_extractor: torch.nn.Module,
         classifier: torch.nn.Sequential,
         optimizer_config: Callable[..., torch.optim.Optimizer],
     ) -> None:
