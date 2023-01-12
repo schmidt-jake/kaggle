@@ -73,10 +73,10 @@ def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
     return cropped
 
 
-def convert_to_uint8(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.uint8]:
-    scale_factor = (2**8 - 1) / (2**dcm.BitsStored - 1)
+def to_bit_depth(arr: npt.NDArray[np.uint16], src_depth: int, dest_depth: int) -> npt.NDArray[np.uint16]:
+    scale_factor = (2**dest_depth - 1) / (2**src_depth - 1)
     arr = arr.astype(np.float32) * scale_factor
-    return np.rint(arr).astype(np.uint8)
+    return np.rint(arr).astype(np.uint16)
 
 
 def dicom2numpy(

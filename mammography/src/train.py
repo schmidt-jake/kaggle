@@ -78,6 +78,10 @@ class DataframeDataPipe(Dataset):
             arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
             windows = utils.get_unique_windows(dcm)
             if not windows.empty:
+                bit_depth = utils.get_suspected_bit_depth(arr)
+                if bit_depth != dcm.BitsStored:
+                    logger.warning(f"Got bad bit depth for {filepath}")
+                    arr = utils.to_bit_depth(arr, src_depth=bit_depth, dest_depth=dcm.BitsStored)
                 windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
                 if windowed_arr.ptp() > 10:
                     arr = windowed_arr
@@ -126,6 +130,8 @@ def replace_submodules(module: torch.nn.Module, **replacement_kwargs: Dict[str, 
         parent = module.get_submodule(parent_name)
         child = parent.get_submodule(child_name)
         new_child = replace_layer(child, **replacement)
+        if isinstance(new_child, torch.nn.modules.conv._ConvNd):
+            torch.nn.init.kaiming_normal_(new_child.weight, nonlinearity="relu")
         setattr(parent, child_name, new_child)
     return module
 
