@@ -7,8 +7,10 @@ import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from pytest import MonkeyPatch
+from pytorch_lightning import Trainer
 from tqdm import tqdm
 
+from mammography.kernels.submit.submit import submit
 from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
@@ -19,31 +21,33 @@ def data_patch(index: int) -> Dict[str, Any]:
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
-    monkeypatch.setattr(
-        "pandas.read_csv",
-        lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0, "patient_id": 0}] * 2),
-    )
-    monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
+    # monkeypatch.setattr(
+    #     "pandas.read_csv",
+    #     lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0, "patient_id": 0}] * 2),
+    # )
+    # monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
+    overrides = [
+        "+trainer.limit_train_batches=1",
+        "+trainer.limit_val_batches=1",
+        "trainer.max_epochs=1",
+        f"trainer.default_root_dir={tmp_path}",
+        "datamodule.image_dir=mammography/data/raw/train_images",
+        "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+        "datamodule.batch_size=2",
+        "datamodule.prefetch_batches=0",
+        "+trainer.detect_anomaly=true",
+        "trainer.benchmark=false",
+        "+trainer.logger.mode=disabled",
+        f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
+        f"trainer.precision={16 if torch.cuda.is_available() else 32}",
+    ]
     with initialize(version_base=None, config_path="../config"):
-        cfg = compose(
-            config_name="train",
-            overrides=[
-                "+trainer.limit_train_batches=1",
-                "+trainer.limit_val_batches=1",
-                "trainer.max_epochs=1",
-                f"trainer.default_root_dir={tmp_path}",
-                "datamodule.image_dir=''",
-                "datamodule.metadata_filepath=''",
-                "datamodule.batch_size=2",
-                "datamodule.prefetch_batches=0",
-                "+trainer.detect_anomaly=true",
-                "trainer.benchmark=false",
-                "+trainer.logger.mode=disabled",
-                f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
-                f"trainer.precision={16 if torch.cuda.is_available() else 32}",
-            ],
-        )
-        train(cfg)
+        train_cfg = compose(config_name="train", overrides=overrides)
+        train(train_cfg)
+
+        overrides.extend(["+dev=submit", "ckpt_path=last", "+trainer.limit_predict_batches=2"])
+        submit_cfg = compose(config_name="train", overrides=overrides)
+        submit(submit_cfg)
 
 
 def test_datamodule(monkeypatch: MonkeyPatch) -> None:
@@ -91,3 +95,34 @@ def test_pf1_metric() -> None:
         )
     result = metric.compute()
     assert not result.isnan()
+
+
+def test_predict(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
+    # monkeypatch.setattr(
+    #     "pandas.read_csv",
+    #     lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0, "patient_id": 0}] * 2),
+    # )
+    # monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
+    with initialize(version_base=None, config_path="../config"):
+        cfg = compose(
+            config_name="train",
+            overrides=[
+                "+trainer.limit_train_batches=1",
+                "+trainer.limit_val_batches=1",
+                "trainer.max_epochs=1",
+                f"trainer.default_root_dir={tmp_path}",
+                "datamodule.image_dir=mammography/data/raw/train_images",
+                "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+                "datamodule.batch_size=2",
+                "datamodule.prefetch_batches=0",
+                "+trainer.detect_anomaly=true",
+                "trainer.benchmark=false",
+                "+trainer.logger.mode=disabled",
+                f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
+                f"trainer.precision={16 if torch.cuda.is_available() else 32}",
+                "+dev=submit",
+                "ckpt_path=null",
+            ],
+        )
+        submit(cfg)

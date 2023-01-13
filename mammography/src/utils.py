@@ -91,11 +91,11 @@ def dicom2numpy(
     return arr, dcm
 
 
-def get_suspected_bit_depth(arr: npt.NDArray) -> int:
+def get_suspected_bit_depth(pixel_value: int) -> int:
     """
-    Returns the smallest even base-2 exponent that is larger than `max(arr) + 1`.
+    Returns the smallest even base-2 exponent that is larger than `pixel_value + 1`.
     """
-    suspected_bit_depth = ceil(log2(arr.max() + 1))
+    suspected_bit_depth = ceil(log2(pixel_value + 1))
     suspected_bit_depth += suspected_bit_depth % 2
     return suspected_bit_depth
 

@@ -6,6 +6,7 @@ trainer:
     - _target_: pytorch_lightning.callbacks.ModelCheckpoint
       mode: &mode max
       every_n_epochs: 1
+      save_last: true
       save_top_k: 1
       verbose: true
       monitor: &monitor metrics/pf1/val
@@ -32,7 +33,7 @@ trainer:
     _target_: pytorch_lightning.loggers.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
-    log_model: true
+    log_model: false
     save_dir: ${trainer.default_root_dir}
     settings:
       _target_: wandb.Settings

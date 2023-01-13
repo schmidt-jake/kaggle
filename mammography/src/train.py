@@ -1,6 +1,7 @@
 import logging
+from collections import defaultdict
 from inspect import signature
-from typing import TYPE_CHECKING, Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set
 
 import cv2
 import hydra
@@ -14,6 +15,7 @@ from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
 from pydicom.pixel_data_handlers.util import apply_windowing
+from pytorch_lightning.callbacks import BasePredictionWriter
 from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
@@ -34,6 +36,35 @@ if TYPE_CHECKING:
     from pytorch_lightning.loggers import WandbLogger
 
 logger = logging.getLogger(__name__)
+
+
+class SubmissionWriter(BasePredictionWriter):
+    def __init__(self, write_interval: str, output_filepath: str) -> None:
+        super().__init__(write_interval)
+        self.output_filepath = output_filepath
+
+    def write_on_epoch_end(
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        predictions: Sequence[Any],
+        batch_indices: Optional[Sequence[Any]],
+    ) -> None:
+        if len(predictions) > 1:
+            logger.warning(f"Expected predictions len 1 but got {len(predictions)}")
+        preds = defaultdict(list)
+        for batch in predictions[0]:
+            batch: Dict[str, torch.Tensor]
+            for key, tensor in batch.items():
+                preds[key].extend(tensor.cpu().numpy())
+        predictions = pd.DataFrame(preds)
+        test_df: pd.DataFrame = trainer.datamodule.df.merge(
+            pd.DataFrame(predictions), on="image_id", how="outer", validate="1:1"
+        )
+        test_df["prediction_id"] = test_df["patient_id"].astype(str) + "_" + test_df["laterality"]
+        test_df["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)
+        test_df = test_df.groupby("prediction_id", as_index=False)["cancer"].mean()
+        test_df.to_csv(self.output_filepath, index=False)
 
 
 class ProbabilisticBinaryF1Score(Metric):
@@ -64,10 +95,11 @@ class ProbabilisticBinaryF1Score(Metric):
 
 
 class DataframeDataPipe(Dataset):
-    def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential) -> None:
+    def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set) -> None:
         super().__init__()
         self.df = df
         self.augmentation = augmentation
+        self.keys = keys
 
     def __len__(self) -> int:
         return len(self.df)
@@ -80,22 +112,24 @@ class DataframeDataPipe(Dataset):
             if not windows.empty:
                 window_index = np.random.choice(windows.index)
                 window = windows.loc[window_index]
-                if window["center"] + window["width"] // 2 > arr.max():
-                    logger.warning(
-                        f"Got invalid window: center={window['center']}, width={window['width']}, pixel_max={arr.max()}"
-                        "\nattempting to fix..."
-                    )
-                    bit_depth = utils.get_suspected_bit_depth(arr)
-                    if bit_depth != dcm.BitsStored:
-                        logger.warning(f"Got bad bit depth for {filepath}")
-                        arr = utils.to_bit_depth(arr, src_depth=bit_depth, dest_depth=dcm.BitsStored)
+                pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=arr.max())
+                window_bit_depth = utils.get_suspected_bit_depth(pixel_value=window["center"] + window["width"] // 2)
+                if pixel_bit_depth != window_bit_depth:
+                    if window_bit_depth != dcm.BitsStored:
+                        arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=window_bit_depth)
                     else:
-                        logger.warning("Couldn't fix it!")
+                        logger.warning(
+                            f"Couldn't fix {filepath}"
+                            f"\ncenter={window['center']}, width={window['width']}"
+                            f"pixel_max={arr.max()}, bit_depth={pixel_bit_depth}"
+                        )
                 windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
                 if windowed_arr.ptp() > 10:
                     arr = windowed_arr
                 else:
-                    logger.warning(f"Got bad window for {filepath}")
+                    logger.warning(f"Got bad window for {filepath}, using raw pixels instead.")
+            else:
+                logger.info(f"Now window found for {filepath}, using raw pixels...")
             # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
             arr = utils.maybe_invert(arr=arr, dcm=dcm)
             arr = utils.maybe_flip_left(arr=arr)
@@ -120,7 +154,7 @@ class DataframeDataPipe(Dataset):
         pixels = functional_tensor.resize(pixels, size=512)
         # d["pixels"] = self.augmentation(pixels)
         d["pixels"] = pixels
-        d = {k: v for k, v in d.items() if k in ["pixels", "cancer"]}
+        d = {k: v for k, v in d.items() if k in self.keys}
         return d
 
 
@@ -176,32 +210,26 @@ class DataModule(pl.LightningDataModule):
 
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
-        self.df.query("patient_id != 27770", inplace=True)
-        self.df.query("image_id != 1942326353", inplace=True)
+        self.df["filepath"] = (
+            self.image_dir + "/" + self.df["patient_id"].astype(str) + "/" + self.df["image_id"].astype(str) + ".dcm"
+        )
         if stage == "fit":
-            # self.df["filepath"] = self.image_dir + "/" + self.df["image_id"].astype(str) + ".png"
-            self.df["filepath"] = (
-                self.image_dir
-                + "/"
-                + self.df["patient_id"].astype(str)
-                + "/"
-                + self.df["image_id"].astype(str)
-                + ".dcm"
-            )
+            self.df.query("patient_id != 27770", inplace=True)
+            self.df.query("image_id != 1942326353", inplace=True)
             class_weights = 1.0 / self.df["cancer"].value_counts()
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
-        elif stage == "predict":
-            self.df["filepath"] = (
-                self.image_dir
-                + "/"
-                + self.df["patient_id"].astype(str)
-                + "/"
-                + self.df["image_id"].astype(str)
-                + ".dcm"
-            )
+            self.cancer_base_rate = self.df["cancer"].mean()
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {"cancer_base_rate": self.cancer_base_rate}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self.cancer_base_rate = state_dict["cancer_base_rate"]
 
     def train_dataloader(self) -> DataLoader:
-        pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.train())  # .to_iter_datapipe()
+        pipe = DataframeDataPipe(
+            self.df, augmentation=self.augmentation.train(), keys={"pixels", "cancer"}
+        )  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
@@ -227,7 +255,9 @@ class DataModule(pl.LightningDataModule):
         # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
     def val_dataloader(self) -> DataLoader:
-        pipe = DataframeDataPipe(self.df, augmentation=self.augmentation.eval())  # .to_iter_datapipe()
+        pipe = DataframeDataPipe(
+            self.df, augmentation=self.augmentation.eval(), keys={"pixels", "cancer", "image_id"}
+        )  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
             batch_size=self.batch_size,
@@ -348,6 +378,7 @@ class Model(pl.LightningModule):
                 step=self.global_step,
                 mode=["L"] * pixels.shape[0],
                 classes=[Classes([{"id": c, "name": "cancer" if c == 1 else "no-cancer"}]) for c in cancer],
+                caption=["cancer" if c == 1 else "no-cancer" for c in cancer],
             )
 
         loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
@@ -365,7 +396,7 @@ class Model(pl.LightningModule):
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
         logit: torch.Tensor = self(batch["pixels"])
-        return logit.sigmoid()
+        return {"image_id": batch["image_id"], "cancer": logit.sigmoid()}
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         config = self.optimizer_config
