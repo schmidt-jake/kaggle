@@ -111,7 +111,7 @@ class DataModule(LightningDataModule):
         return len(y) / (y.nunique() * y.value_counts())
 
     def _use_artifact(self) -> None:
-        if self.trainer.logger.experiment.mode == "online":
+        if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
             artifact = wandb.Artifact(name="input", type="dataset")
             artifact.add_reference(uri=f"file://{self.metadata_filepath}", name="metadata.csv")
             artifact.add_reference(uri=f"file://{self.image_dir}", name="image_dir", checksum=False, max_objects=1e9)
