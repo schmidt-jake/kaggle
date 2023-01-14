@@ -33,7 +33,7 @@ trainer:
     _target_: mammography.src.ptl_patches.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
-    log_model: false
+    log_model: all
     save_dir: ${trainer.default_root_dir}
     settings:
       _target_: wandb.Settings
