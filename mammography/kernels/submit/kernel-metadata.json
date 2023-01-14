@@ -2,7 +2,7 @@
   "id": "jakeschmidt/mammography-submit",
   "id_no": 33409205,
   "title": "mammography-submit",
-  "code_file": "mammography-submit.ipynb",
+  "code_file": "submit.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
@@ -11,7 +11,7 @@
   "keywords": [],
   "dataset_sources": [],
   "kernel_sources": [
-    "code/jakeschmidt/mammography-train"
+    "jakeschmidt/mammography-train"
   ],
   "competition_sources": [
     "competitions/rsna-breast-cancer-detection"
