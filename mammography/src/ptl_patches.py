@@ -24,7 +24,7 @@ class WandbLogger(_WandbLogger):
                 type="checkpoint",
                 metadata={checkpoint_callback.monitor: score.item()},
             )
-            artifact.add_reference(uri=path, name="checkpoint.pickle")
+            artifact.add_reference(uri=f"file://{path}", name="checkpoint.pickle")
             self.experiment.log_artifact(artifact, aliases=[tag])
             logger.info(f"Logged artifact {artifact.name}:{tag} from {path}")
             self._logged_model_time[path] = time
