@@ -44,6 +44,7 @@ class SubmissionWriter(BasePredictionWriter):
 
 @hydra.main(config_path="../config", config_name="submit", version_base=None)
 def submit(cfg: DictConfig) -> None:
+    instantiate(cfg.seed_fn)
     model: pl.LightningModule = instantiate(cfg.model)
     datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
     trainer: pl.Trainer = instantiate(cfg.trainer)

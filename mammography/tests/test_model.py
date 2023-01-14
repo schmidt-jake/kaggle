@@ -9,8 +9,9 @@ from hydra.utils import instantiate
 from pytest import MonkeyPatch
 from tqdm import tqdm
 
+from mammography.src.metrics import ProbabilisticBinaryF1Score
 from mammography.src.submit import submit
-from mammography.src.train import ProbabilisticBinaryF1Score, train
+from mammography.src.train import train
 
 
 def data_patch(index: int) -> Dict[str, Any]:

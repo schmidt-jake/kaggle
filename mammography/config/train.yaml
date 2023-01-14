@@ -39,7 +39,7 @@ trainer:
       _target_: wandb.Settings
       code_dir: /kaggle/working/kaggle
 datamodule:
-  _target_: mammography.src.train.DataModule
+  _target_: mammography.src.data.DataModule
   metadata_filepath: ???
   image_dir: ???
   batch_size: 23
@@ -68,7 +68,7 @@ datamodule:
       # - _target_: torchvision.transforms.CenterCrop
       #   size: 512
 model:
-  _target_: mammography.src.train.Model
+  _target_: mammography.src.model.Model
   optimizer_config:
     _convert_: all
     optimizer:
@@ -84,7 +84,7 @@ model:
         factor: 1.0
       interval: step
   feature_extractor:
-    _target_: mammography.src.train.replace_submodules
+    _target_: mammography.src.model.replace_submodules
     _convert_: all
     module:
       _target_: torchvision.models.densenet161
@@ -94,3 +94,7 @@ model:
       in_channels: 1
   classifier:
     _target_: torch.nn.Sequential
+seed_fn:
+  _target_: lightning_lite.utilities.seed.seed_everything
+  seed: 42
+  workers: true

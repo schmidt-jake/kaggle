@@ -14,10 +14,14 @@ trainer:
     project: rsna-breast-cancer-detection
     save_dir: ${trainer.default_root_dir}
 datamodule:
-  _target_: mammography.src.train.DataModule.load_from_checkpoint
+  _target_: mammography.src.data.DataModule.load_from_checkpoint
   checkpoint_path: ???
   metadata_filepath: ???
   image_dir: ???
 model:
-  _target_: mammography.src.train.Model.load_from_checkpoint
+  _target_: mammography.src.model.Model.load_from_checkpoint
   checkpoint_path: ???
+seed_fn:
+  _target_: lightning_lite.utilities.seed.seed_everything
+  seed: 42
+  workers: true
