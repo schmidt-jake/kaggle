@@ -48,9 +48,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
         )
         train(train_cfg)
 
-        ckpt_path = (
-            tmp_path / train_cfg.trainer.logger.project / train_cfg.trainer.logger.id / "checkpoints" / "last.ckpt"
-        )
+        ckpt_path = tmp_path / "checkpoints" / "last.ckpt"
         submit_cfg = compose(
             config_name="submit",
             overrides=[
