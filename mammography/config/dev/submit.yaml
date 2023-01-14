@@ -8,4 +8,5 @@ trainer:
       output_filepath: submission.csv
   logger:
     job_type: submission
+    mode: offline
 ckpt_path: ???
