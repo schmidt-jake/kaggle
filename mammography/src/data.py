@@ -115,7 +115,7 @@ class DataModule(LightningDataModule):
             artifact = wandb.Artifact(name="input", type="dataset")
             artifact.add_reference(uri=f"file://{self.metadata_filepath}", name="metadata.csv")
             artifact.add_reference(uri=f"file://{self.image_dir}", name="image_dir", checksum=False, max_objects=1e9)
-            self.trainer.logger.use_artifact(artifact, artifact_type="dataset")
+            self.trainer.logger.use_artifact(artifact, artifact_type="dataset").save()
         else:
             logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 

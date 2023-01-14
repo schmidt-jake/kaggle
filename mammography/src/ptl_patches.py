@@ -26,5 +26,5 @@ class WandbLogger(_WandbLogger):
             )
             artifact.add_reference(uri=f"file://{path}", name="checkpoint.pickle")
             self.experiment.log_artifact(artifact, aliases=[tag])
-            logger.info(f"Logged artifact {artifact.name}:{tag} from {path}")
+            logger.info(f"Logged checkpoint with tag {tag} from {path}")
             self._logged_model_time[path] = time
