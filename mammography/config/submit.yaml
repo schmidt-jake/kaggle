@@ -25,8 +25,3 @@ seed_fn:
   _target_: lightning_lite.utilities.seed.seed_everything
   seed: 42
   workers: true
-
-hydra:
-  output_subdir: null
-  run:
-    dir: .
