@@ -159,7 +159,7 @@ pytorch-lightning==1.8.6
     # via
     #   -c mammography/requirements/dev.txt
     #   -r mammography/requirements/main.in
-pytz==2022.7
+pytz==2022.7.1
     # via
     #   -c mammography/requirements/dev.txt
     #   pandas
@@ -169,13 +169,13 @@ pyyaml==6.0
     #   omegaconf
     #   pytorch-lightning
     #   wandb
-requests==2.28.1
+requests==2.28.2
     # via
     #   -c mammography/requirements/dev.txt
     #   fsspec
     #   torchvision
     #   wandb
-sentry-sdk==1.12.1
+sentry-sdk==1.13.0
     # via
     #   -c mammography/requirements/dev.txt
     #   wandb

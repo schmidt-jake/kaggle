@@ -7,10 +7,9 @@ import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from pytest import MonkeyPatch
-from pytorch_lightning import Trainer
 from tqdm import tqdm
 
-from mammography.kernels.submit.submit import submit
+from mammography.src.submit import submit
 from mammography.src.train import ProbabilisticBinaryF1Score, train
 
 
@@ -26,27 +25,42 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     #     lambda filepath: pd.DataFrame([{"image_id": 0, "cancer": 0, "patient_id": 0}] * 2),
     # )
     # monkeypatch.setattr("mammography.src.train.DataframeDataPipe.__getitem__", staticmethod(data_patch))
-    overrides = [
-        "+trainer.limit_train_batches=1",
-        "+trainer.limit_val_batches=1",
-        "trainer.max_epochs=1",
-        f"trainer.default_root_dir={tmp_path}",
-        "datamodule.image_dir=mammography/data/raw/train_images",
-        "datamodule.metadata_filepath=mammography/data/raw/train.csv",
-        "datamodule.batch_size=2",
-        "datamodule.prefetch_batches=0",
-        "+trainer.detect_anomaly=true",
-        "trainer.benchmark=false",
-        "+trainer.logger.mode=disabled",
-        f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
-        f"trainer.precision={16 if torch.cuda.is_available() else 32}",
-    ]
     with initialize(version_base=None, config_path="../config"):
-        train_cfg = compose(config_name="train", overrides=overrides)
+        train_cfg = compose(
+            config_name="train",
+            overrides=[
+                "+trainer.limit_train_batches=1",
+                "+trainer.limit_val_batches=1",
+                "trainer.max_epochs=1",
+                f"trainer.default_root_dir={tmp_path}",
+                "datamodule.image_dir=mammography/data/raw/train_images",
+                "datamodule.metadata_filepath=mammography/data/raw/train.csv",
+                "datamodule.batch_size=2",
+                "datamodule.prefetch_batches=0",
+                "+trainer.detect_anomaly=true",
+                "trainer.benchmark=false",
+                "+trainer.logger.mode=offline",
+                "+trainer.logger.id=pytest",
+                f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
+                f"trainer.precision={16 if torch.cuda.is_available() else 32}",
+            ],
+        )
         train(train_cfg)
 
-        overrides.extend(["+dev=submit", "ckpt_path=last", "+trainer.limit_predict_batches=2"])
-        submit_cfg = compose(config_name="train", overrides=overrides)
+        ckpt_path = (
+            tmp_path / train_cfg.trainer.logger.project / train_cfg.trainer.logger.id / "checkpoints" / "last.ckpt"
+        )
+        submit_cfg = compose(
+            config_name="submit",
+            overrides=[
+                f"+trainer.default_root_dir={train_cfg.trainer.default_root_dir}",
+                "datamodule.image_dir=mammography/data/raw/test_images",
+                "datamodule.metadata_filepath=mammography/data/raw/test.csv",
+                f"+trainer.logger.id={train_cfg.trainer.logger.id}",
+                f"datamodule.checkpoint_path={ckpt_path}",
+                f"model.checkpoint_path={ckpt_path}",
+            ],
+        )
         submit(submit_cfg)
 
 

@@ -1,7 +1,6 @@
 import logging
-from collections import defaultdict
 from inspect import signature
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 import cv2
 import hydra
@@ -15,7 +14,6 @@ from hydra.utils import instantiate
 from lightning_lite.utilities.seed import seed_everything
 from omegaconf import DictConfig
 from pydicom.pixel_data_handlers.util import apply_windowing
-from pytorch_lightning.callbacks import BasePredictionWriter
 from pytorch_lightning.profilers import PyTorchProfiler
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
@@ -36,35 +34,6 @@ if TYPE_CHECKING:
     from pytorch_lightning.loggers import WandbLogger
 
 logger = logging.getLogger(__name__)
-
-
-class SubmissionWriter(BasePredictionWriter):
-    def __init__(self, write_interval: str, output_filepath: str) -> None:
-        super().__init__(write_interval)
-        self.output_filepath = output_filepath
-
-    def write_on_epoch_end(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-        predictions: Sequence[Any],
-        batch_indices: Optional[Sequence[Any]],
-    ) -> None:
-        if len(predictions) > 1:
-            logger.warning(f"Expected predictions len 1 but got {len(predictions)}")
-        preds = defaultdict(list)
-        for batch in predictions[0]:
-            batch: Dict[str, torch.Tensor]
-            for key, tensor in batch.items():
-                preds[key].extend(tensor.cpu().numpy())
-        predictions = pd.DataFrame(preds)
-        test_df: pd.DataFrame = trainer.datamodule.df.merge(
-            pd.DataFrame(predictions), on="image_id", how="outer", validate="1:1"
-        )
-        test_df["prediction_id"] = test_df["patient_id"].astype(str) + "_" + test_df["laterality"]
-        test_df["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)
-        test_df = test_df.groupby("prediction_id", as_index=False)["cancer"].mean()
-        test_df.to_csv(self.output_filepath, index=False)
 
 
 class ProbabilisticBinaryF1Score(Metric):
@@ -112,8 +81,10 @@ class DataframeDataPipe(Dataset):
             if not windows.empty:
                 window_index = np.random.choice(windows.index)
                 window = windows.loc[window_index]
-                pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=arr.max())
-                window_bit_depth = utils.get_suspected_bit_depth(pixel_value=window["center"] + window["width"] // 2)
+                pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
+                window_bit_depth = utils.get_suspected_bit_depth(
+                    pixel_value=int(window["center"] + window["width"] // 2)
+                )
                 if pixel_bit_depth != window_bit_depth:
                     if window_bit_depth != dcm.BitsStored:
                         arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=window_bit_depth)
@@ -192,21 +163,30 @@ class DataModule(pl.LightningDataModule):
         self,
         metadata_filepath: str,
         image_dir: str,
-        augmentation: torch.nn.Sequential,
+        augmentation: DictConfig,
         batch_size: int,
         prefetch_batches: int,
     ) -> None:
         super().__init__()
+        self.save_hyperparameters(ignore=["metadata_filepath", "image_dir"])
         self.metadata_filepath = metadata_filepath
         self.image_dir = image_dir
-        self.augmentation = augmentation
-        self.batch_size = batch_size
+        self.augmentation: torch.nn.Sequential = instantiate(self.hparams.augmentation)
         self.num_workers = torch.multiprocessing.cpu_count()
-        self.prefetch = max(prefetch_batches * self.batch_size // max(self.num_workers, 1), 2)
+        self.prefetch = max(self.hparams.prefetch_batches * self.hparams.batch_size // max(self.num_workers, 1), 2)
 
     @staticmethod
     def compute_class_weights(y: pd.Series) -> pd.Series:
         return len(y) / (y.nunique() * y.value_counts())
+
+    def _use_artifact(self) -> None:
+        if self.trainer.logger.experiment.mode == "online":
+            artifact = wandb.Artifact(name="input", type="dataset")
+            artifact.add_reference(uri=f"file://{self.metadata_filepath}", name="metadata.csv")
+            artifact.add_reference(uri=f"file://{self.image_dir}", name="image_dir", checksum=False, max_objects=1e9)
+            self.trainer.logger.use_artifact(artifact, artifact_type="dataset")
+        else:
+            logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
@@ -220,6 +200,8 @@ class DataModule(pl.LightningDataModule):
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
             self.cancer_base_rate = self.df["cancer"].mean()
 
+        self._use_artifact()
+
     def state_dict(self) -> Dict[str, Any]:
         return {"cancer_base_rate": self.cancer_base_rate}
 
@@ -232,7 +214,7 @@ class DataModule(pl.LightningDataModule):
         )  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
-            batch_size=self.batch_size,
+            batch_size=self.hparams.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch,
@@ -260,7 +242,7 @@ class DataModule(pl.LightningDataModule):
         )  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
-            batch_size=self.batch_size,
+            batch_size=self.hparams.batch_size,
             shuffle=False,
             pin_memory=True,
             num_workers=self.num_workers,
@@ -275,14 +257,15 @@ class DataModule(pl.LightningDataModule):
 class Model(pl.LightningModule):
     def __init__(
         self,
-        feature_extractor: torch.nn.Module,
-        classifier: torch.nn.Sequential,
-        optimizer_config: Callable[..., torch.optim.Optimizer],
+        feature_extractor: DictConfig,
+        classifier: DictConfig,
+        optimizer_config: DictConfig,
     ) -> None:
         super().__init__()
+        self.save_hyperparameters()
         self.logger: "WandbLogger"
-        self.feature_extractor = feature_extractor
-        self.classifier = classifier
+        self.feature_extractor: torch.nn.Module = instantiate(self.hparams.feature_extractor)
+        self.classifier: torch.nn.Module = instantiate(self.hparams.classifier)
         self.train_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
@@ -305,7 +288,12 @@ class Model(pl.LightningModule):
             prefix="metrics/",
             postfix="/val",
         )
-        self.optimizer_config = optimizer_config
+
+    def _init_metrics(self) -> None:
+        for name, metric in self.train_metrics.items(keep_base=True):
+            self.logger.experiment.define_metric(name=name, summary="max" if metric.higher_is_better else "min")
+        for name, metric in self.val_metrics.items(keep_base=True):
+            self.logger.experiment.define_metric(name=name, summary="max" if metric.higher_is_better else "min")
 
     @staticmethod
     def get_bias(y: pd.Series) -> float:
@@ -328,12 +316,13 @@ class Model(pl.LightningModule):
 
     def setup(self, stage: str) -> None:
         self.example_input_array = torch.rand(
-            size=(self.trainer.datamodule.batch_size, 1, 512, 512), dtype=torch.float32
+            size=(self.trainer.datamodule.hparams.batch_size, 1, 512, 512), dtype=torch.float32
         )
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss(
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
+            self._init_metrics()
             # for m in self.modules():
             #     if isinstance(m, torch.nn.Conv2d):
             #         torch.nn.init.kaiming_normal_(m.weight)
@@ -386,7 +375,7 @@ class Model(pl.LightningModule):
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
         logit: torch.Tensor = self(batch["pixels"])
         preds = logit.sigmoid()
         # self.logger.experiment.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
@@ -394,20 +383,21 @@ class Model(pl.LightningModule):
         self.val_metrics(preds=preds, target=batch["cancer"], value=loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
-    def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:  # type: ignore[override]
+    def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         logit: torch.Tensor = self(batch["pixels"])
         return {"image_id": batch["image_id"], "cancer": logit.sigmoid()}
 
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        config = self.optimizer_config
-        config["optimizer"] = config["optimizer"](params=self.parameters())
+    def configure_optimizers(self) -> Dict[str, Any]:
+        config = instantiate(self.hparams.optimizer_config)
+        config["optimizer"]: torch.optim.Optimizer = config["optimizer"](params=self.parameters())
         try:
-            config["lr_scheduler"]["scheduler"] = config["lr_scheduler"]["scheduler"](optimizer=config["optimizer"])
+            config["lr_scheduler"]["scheduler"]: torch.optim.lr_scheduler._LRScheduler = config["lr_scheduler"][
+                "scheduler"
+            ](optimizer=config["optimizer"])
         except ValueError:
-            config["lr_scheduler"]["scheduler"] = config["lr_scheduler"]["scheduler"](
-                optimizer=config["optimizer"], total_steps=self.trainer.estimated_stepping_batches
-            )
-        del self.optimizer_config
+            config["lr_scheduler"]["scheduler"]: torch.optim.lr_scheduler._LRScheduler = config["lr_scheduler"][
+                "scheduler"
+            ](optimizer=config["optimizer"], total_steps=self.trainer.estimated_stepping_batches)
         return config
 
     def optimizer_zero_grad(
@@ -420,9 +410,8 @@ class Model(pl.LightningModule):
 def train(cfg: DictConfig) -> None:
     seed_everything(seed=42, workers=True)
     trainer: pl.Trainer = instantiate(cfg.trainer)
-    datamodule: DataModule = instantiate(cfg.datamodule)
-    model: pl.LightningModule = instantiate(cfg.model)
-    trainer.logger.log_hyperparams(cfg)
+    datamodule: DataModule = instantiate(cfg.datamodule, _recursive_=False)
+    model: pl.LightningModule = instantiate(cfg.model, _recursive_=False)
     trainer.logger.watch(model, log="all", log_freq=cfg.trainer.log_every_n_steps, log_graph=True)
     trainer.fit(model=model, datamodule=datamodule)
     if isinstance(trainer.profiler, PyTorchProfiler):
@@ -432,5 +421,5 @@ def train(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.NOTSET)
+    logging.basicConfig(level=logging.INFO)
     train()

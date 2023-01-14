@@ -1,0 +1,23 @@
+trainer:
+  _target_: pytorch_lightning.Trainer
+  default_root_dir: ???
+  callbacks:
+    - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+      refresh_rate: 1
+    - _target_: mammography.src.submit.SubmissionWriter
+      write_interval: epoch
+      output_filepath: submission.csv
+  logger:
+    _target_: mammography.src.ptl_patches.WandbLogger
+    job_type: submission
+    mode: offline
+    project: rsna-breast-cancer-detection
+    save_dir: ${trainer.default_root_dir}
+datamodule:
+  _target_: mammography.src.train.DataModule.load_from_checkpoint
+  checkpoint_path: ???
+  metadata_filepath: ???
+  image_dir: ???
+model:
+  _target_: mammography.src.train.Model.load_from_checkpoint
+  checkpoint_path: ???

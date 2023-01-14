@@ -1,9 +1,9 @@
 {
   "id": "jakeschmidt/mammography-submit",
   "title": "mammography-submit",
-  "code_file": "submit.py",
+  "code_file": "submit.ipynb",
   "language": "python",
-  "kernel_type": "script",
+  "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": false,

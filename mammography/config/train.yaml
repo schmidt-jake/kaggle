@@ -30,7 +30,7 @@ trainer:
   default_root_dir: ???
   # accumulate_grad_batches: 1
   logger:
-    _target_: pytorch_lightning.loggers.WandbLogger
+    _target_: mammography.src.ptl_patches.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
     log_model: false
@@ -85,6 +85,7 @@ model:
       interval: step
   feature_extractor:
     _target_: mammography.src.train.replace_submodules
+    _convert_: all
     module:
       _target_: torchvision.models.densenet161
       drop_rate: 0.0
