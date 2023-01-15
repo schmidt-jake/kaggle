@@ -1,3 +1,4 @@
+import re
 from glob import glob
 from logging import getLogger
 from math import ceil, log2
@@ -17,6 +18,8 @@ from torchvision.transforms import functional_tensor
 
 logger = getLogger(__name__)
 
+DICOM_FILEPATH = re.compile(r"^[\w/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.dcm$")
+
 
 def inspect_module(module: torch.nn.Module) -> None:
     train_nodes, eval_nodes = get_graph_node_names(module)
@@ -28,12 +31,16 @@ def inspect_module(module: torch.nn.Module) -> None:
             print(node)
 
 
-def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train_images/*/*.dcm") -> str:
-    image_id = str(image_id)
-    for filepath in glob(glob_pattern):
-        if image_id in filepath:
-            logger.info(f"Found filepath={filepath}")
-            return filepath
+def extract_image_id_from_filepath(filepath: str) -> str:
+    match = re.match(DICOM_FILEPATH, filepath)
+    if match is not None:
+        return match.group("image_id")
+    raise ValueError(f"Not a valid dicom path: {filepath}")
+
+
+def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train_images/*/{image_id}.dcm") -> str:
+    for filepath in glob(glob_pattern.format(image_id=image_id)):
+        return filepath
     raise ValueError(f"Found no filepath={filepath}")
 
 
@@ -45,7 +52,7 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     w = arr.shape[1]
     if arr[:, : w // 2].sum() > arr[:, w // 2 :].sum():
         # `copy()` to avoid negative stride (https://discuss.pytorch.org/t/torch-from-numpy-not-support-negative-strides/3663)
-        arr = np.flip(arr, axis=1).copy()
+        arr = np.flip(arr, axis=1)
     return arr
 
 
@@ -73,21 +80,15 @@ def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
     return cropped
 
 
-def to_bit_depth(arr: npt.NDArray[np.uint16], src_depth: int, dest_depth: int) -> npt.NDArray[np.uint16]:
+def to_bit_depth(arr: npt.NDArray[np.uint16], src_depth: int, dest_depth: int) -> npt.NDArray:
     scale_factor = (2**dest_depth - 1) / (2**src_depth - 1)
     arr = arr.astype(np.float32) * scale_factor
-    return np.rint(arr).astype(np.uint16)
+    return np.rint(arr).astype(getattr(np, f"uint{dest_depth}"))
 
 
-def dicom2numpy(
-    filepath: str, should_apply_window_fn: bool = True, window_index: int = 0
-) -> Tuple[npt.NDArray, FileDataset]:
-    # adapted from https://www.kaggle.com/code/raddar/convert-dicom-to-np-array-the-correct-way/notebook
+def dicom2numpy(filepath: str) -> Tuple[npt.NDArray, FileDataset]:
     dcm: FileDataset = dcmread(filepath)
     arr = dcm.pixel_array
-    # if should_apply_window_fn:
-    #     arr = apply_windowing(arr=arr, ds=dcm, index=window_index)
-    # logger.debug(f"{arr.dtype=}\n{arr.min()=}\n{arr.max()=}\n{dcm.BitsStored=}")
     return arr, dcm
 
 
@@ -140,6 +141,20 @@ def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[in
         ax.set_title(title, fontsize="small")
 
 
+def plot_arr(arr: npt.NDArray, dcm: FileDataset, ax: plt.Axes, vmax_base2: Optional[int] = None, **meta) -> None:
+    ax.imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None, cmap="gray")
+    title = [f"{k}={v}" for k, v in meta.items()]
+    title.append(f"pixel_range={arr.min():.2f},{arr.max():.2f}")
+    if dcm.PhotometricInterpretation == "MONOCHROME1":
+        title.append("\nMONOCHROME CORRECTED")
+    if hasattr(dcm, "WindowCenter"):
+        title.append(f"\nwindow center={dcm.WindowCenter}")
+    if hasattr(dcm, "WindowWidth"):
+        title.append(f"window width=\n{dcm.WindowWidth}")
+    title = "\n".join(title)
+    ax.set_title(title, fontsize="small")
+
+
 def plot_samples(
     *args: Tuple[pd.DataFrame, Optional[int], bool],
     n: int = 10,
@@ -161,22 +176,4 @@ def plot_samples(
             filepath = find_filepath(row["image_id"])
             arr, dcm = dicom2numpy(filepath, should_apply_window_fn=should_apply_window_fn)
             # arr = cv2.resize(arr, (256, 256))
-            a.imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
-            title = "\n".join(
-                [
-                    f"image_id={row['image_id']}",
-                    # f"VOILUT_fn={getattr(dcm, 'VOILUTFunction', None)}",
-                    f"site_id={row['site_id']}",
-                    f"machine_id={row['machine_id']}",
-                    # f"view={row['view']}",
-                    # f"laterality={row['laterality']}",
-                    f"pixel_range={arr.min():.2f},{arr.max():.2f}",
-                ]
-            )
-            if dcm.PhotometricInterpretation == "MONOCHROME1":
-                title += "\nMONOCHROME CORRECTED"
-            if hasattr(dcm, "WindowCenter"):
-                title += f"\nwindow center={dcm.WindowCenter}"
-            if hasattr(dcm, "WindowWidth"):
-                title += f"window width=\n{dcm.WindowWidth}"
-            a.set_title(title, fontsize="small")
+            plot_arr(arr=arr, dcm=dcm, ax=a, vmax_base2=vmax_base2, **row)

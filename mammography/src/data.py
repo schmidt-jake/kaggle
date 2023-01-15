@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Set
+from typing import Any, Dict, Generator, Set, Tuple
 
 import cv2
 import numpy as np
@@ -23,6 +23,26 @@ from mammography.src import utils
 logger = logging.getLogger(__name__)
 
 
+def extract_dicom(filepath: str) -> Generator[Tuple[npt.NDArray, int], None, None]:
+    raw_arr, dcm = utils.dicom2numpy(filepath)
+    windows = utils.get_unique_windows(dcm)
+    if windows.empty:
+        raise RuntimeError(f"Found no windows for filepath {filepath}")
+    fn = dcm.get("VOILUTFunction", "linear").lower()
+    pixel_max = raw_arr.max()
+    for index, window in windows.iterrows():
+        if fn == "linear" and window["center"] > pixel_max:
+            arr = raw_arr.copy()
+        else:
+            arr = apply_windowing(arr=raw_arr.copy(), ds=dcm, index=index)
+        pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
+        if dcm.PhotometricInterpretation == "MONOCHROME1":
+            arr = 2**pixel_bit_depth - 1 - arr
+        arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=8)
+        arr = utils.maybe_flip_left(arr=arr)
+        yield arr, index
+
+
 class DataframeDataPipe(Dataset):
     def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set) -> None:
         super().__init__()
@@ -36,24 +56,22 @@ class DataframeDataPipe(Dataset):
     @staticmethod
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
         if filepath.endswith(".dcm"):
-            arr, dcm = utils.dicom2numpy(filepath, should_apply_window_fn=False)
+            arr, dcm = utils.dicom2numpy(filepath)
+            pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
             windows = utils.get_unique_windows(dcm)
             if not windows.empty:
                 window_index = np.random.choice(windows.index)
                 window = windows.loc[window_index]
-                pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
                 window_bit_depth = utils.get_suspected_bit_depth(
                     pixel_value=int(window["center"] + window["width"] // 2)
                 )
+                if not (pixel_bit_depth == window_bit_depth == dcm.BitsStored):
+                    logger.warning(
+                        f"Disagreement! Bits stored={dcm.BitsStored},"
+                        f" pixel_depth={pixel_bit_depth}, window depth={window_bit_depth}"
+                    )
                 if pixel_bit_depth != window_bit_depth:
-                    if window_bit_depth != dcm.BitsStored:
-                        arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=window_bit_depth)
-                    else:
-                        logger.warning(
-                            f"Couldn't fix {filepath}"
-                            f"\ncenter={window['center']}, width={window['width']}"
-                            f"pixel_max={arr.max()}, bit_depth={pixel_bit_depth}"
-                        )
+                    arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=window_bit_depth)
                 windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
                 if windowed_arr.ptp() > 10:
                     arr = windowed_arr
