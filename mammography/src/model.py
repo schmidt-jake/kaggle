@@ -57,7 +57,6 @@ class Model(pl.LightningModule):
         self.save_hyperparameters()
         self.logger: "WandbLogger"
         self.feature_extractor: torch.nn.Module = instantiate(self.hparams.feature_extractor)
-        self.logger.watch(self.feature_extractor, log="all", log_freq=self.trainer.log_every_n_steps, log_graph=True)
         self.classifier: torch.nn.Module = instantiate(self.hparams.classifier)
         self.train_metrics = MetricCollection(
             {
@@ -116,6 +115,9 @@ class Model(pl.LightningModule):
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
             self._init_metrics()
+            self.logger.watch(
+                self.feature_extractor, log="all", log_freq=self.trainer.log_every_n_steps, log_graph=True
+            )
             # for m in self.modules():
             #     if isinstance(m, torch.nn.Conv2d):
             #         torch.nn.init.kaiming_normal_(m.weight)

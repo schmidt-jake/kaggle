@@ -17,7 +17,6 @@ trainer:
       monitor: *monitor
       verbose: true
       mode: *mode
-      divergence_threshold: 0.1
       patience: 5
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
@@ -73,9 +72,10 @@ model:
   optimizer_config:
     _convert_: all
     optimizer:
-      _target_: torch.optim.SGD
-      lr: 1e-6
-      momentum: 0.9
+      _target_: torch.optim.Adam
+      lr: 1e-3
+      fused: true
+      # momentum: 0.9
       weight_decay: 0.0
       _partial_: true
     lr_scheduler:
