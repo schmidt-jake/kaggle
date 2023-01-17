@@ -127,7 +127,7 @@ class DataModule(LightningDataModule):
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams.augmentation)
         self.num_workers = torch.multiprocessing.cpu_count()
         self.prefetch = max(self.hparams.prefetch_batches * self.hparams.batch_size // max(self.num_workers, 1), 2)
-        self.filepath_format = os.path.join(self.image_dir, "{image_id}.png")
+        self.filepath_format = os.path.join(self.image_dir, "{image_id}_0.png")
 
     @staticmethod
     def compute_class_weights(y: pd.Series) -> pd.Series:
