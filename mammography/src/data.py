@@ -134,7 +134,7 @@ class DataModule(LightningDataModule):
         return len(y) / (y.nunique() * y.value_counts())
 
     def _format_filepath(self, row: pd.Series):
-        return self.filepath_format(**row)
+        return self.filepath_format.format(**row)
 
     def _use_artifact(self) -> None:
         if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
