@@ -92,8 +92,6 @@ model:
       num_classes: 1
     features.conv0:
       in_channels: 1
-  classifier:
-    _target_: torch.nn.Sequential
 seed_fn:
   _target_: lightning_lite.utilities.seed.seed_everything
   seed: 42

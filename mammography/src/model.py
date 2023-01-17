@@ -50,14 +50,12 @@ class Model(pl.LightningModule):
     def __init__(
         self,
         feature_extractor: DictConfig,
-        classifier: DictConfig,
         optimizer_config: DictConfig,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
         self.logger: "WandbLogger"
         self.feature_extractor: torch.nn.Module = instantiate(self.hparams.feature_extractor)
-        self.classifier: torch.nn.Module = instantiate(self.hparams.classifier)
         self.train_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
@@ -135,9 +133,9 @@ class Model(pl.LightningModule):
         # features: torch.Tensor = checkpoint_sequential(
         #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
         # )
-        x = x.float() / 255.0
-        features: torch.Tensor = self.feature_extractor(x)
-        predictions: torch.Tensor = self.classifier(features)
+        x = x.float()
+        x /= 255.0
+        predictions: torch.Tensor = self.feature_extractor(x)
         # predictions: torch.Tensor = checkpoint_sequential(
         #     self.classifier, segments=2, input=features, preserve_rng_state=False
         # )

@@ -52,7 +52,7 @@ identify==2.5.13
     # via pre-commit
 iniconfig==2.0.0
     # via pytest
-ipykernel==6.20.1
+ipykernel==6.20.2
     # via -r mammography/requirements/dev.in
 ipython==8.8.0
     # via ipykernel

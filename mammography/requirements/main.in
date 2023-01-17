@@ -9,6 +9,7 @@ dicomsdl
 # functorch==0.1.1  # compatible with torch 1.11
 hydra-core
 lightning-lite
+numexpr
 omegaconf
 opencv-python-headless
 pandas

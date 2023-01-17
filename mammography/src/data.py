@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Dict, Generator, Set, Tuple
+from typing import Any, Dict, Set
 
 import cv2
 import numpy as np
@@ -10,7 +10,6 @@ import torch
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from pydicom.pixel_data_handlers.util import apply_windowing
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision.transforms import functional_tensor
@@ -24,72 +23,20 @@ from mammography.src import utils
 logger = logging.getLogger(__name__)
 
 
-def extract_dicom(filepath: str) -> Generator[Tuple[npt.NDArray, int], None, None]:
-    raw_arr, dcm = utils.dicom2numpy(filepath)
-    windows = utils.get_unique_windows(dcm)
-    if windows.empty:
-        raise RuntimeError(f"Found no windows for filepath {filepath}")
-    fn = dcm.get("VOILUTFunction", "linear").lower()
-    pixel_max = raw_arr.max()
-    for index, window in windows.iterrows():
-        if fn == "linear" and window["center"] > pixel_max:
-            arr = raw_arr.copy()
-        else:
-            print(filepath, window)
-            arr = apply_windowing(arr=raw_arr.copy(), ds=dcm, index=index)
-        pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
-        if dcm.PhotometricInterpretation == "MONOCHROME1":
-            arr = 2**pixel_bit_depth - 1 - arr
-        arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=8)
-        arr = utils.maybe_flip_left(arr=arr)
-        yield arr, index
-        break
-
-
 class DataframeDataPipe(Dataset):
     def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set) -> None:
         super().__init__()
         self.df = df
         self.augmentation = augmentation
         self.keys = keys
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
     def __len__(self) -> int:
         return len(self.df)
 
     @staticmethod
     def _read(filepath: str) -> npt.NDArray[np.uint8]:
-        if filepath.endswith(".dcm"):
-            arr, dcm = utils.dicom2numpy(filepath)
-            pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
-            windows = utils.get_unique_windows(dcm)
-            if not windows.empty:
-                window_index = np.random.choice(windows.index)
-                window = windows.loc[window_index]
-                window_bit_depth = utils.get_suspected_bit_depth(
-                    pixel_value=int(window["center"] + window["width"] // 2)
-                )
-                if not (pixel_bit_depth == window_bit_depth == dcm.BitsStored):
-                    logger.warning(
-                        f"Disagreement! Bits stored={dcm.BitsStored},"
-                        f" pixel_depth={pixel_bit_depth}, window depth={window_bit_depth}"
-                    )
-                if pixel_bit_depth != window_bit_depth:
-                    arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=window_bit_depth)
-                windowed_arr = apply_windowing(arr=arr.copy(), ds=dcm, index=np.random.choice(windows.index))
-                if windowed_arr.ptp() > 10:
-                    arr = windowed_arr
-                else:
-                    logger.warning(f"Got bad window for {filepath}, using raw pixels instead.")
-            else:
-                logger.info(f"Now window found for {filepath}, using raw pixels...")
-            # dcm.BitsStored = utils.get_suspected_bit_depth(arr)
-            arr = utils.maybe_invert(arr=arr, dcm=dcm)
-            arr = utils.maybe_flip_left(arr=arr)
-            # arr = utils.scale_to_01(arr=arr, dcm=dcm)
-        elif filepath.endswith(".png"):
-            arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-        else:
-            raise ValueError(f"Got unknown file suffix in filepath: {filepath}")
+        arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         return arr
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
@@ -97,6 +44,7 @@ class DataframeDataPipe(Dataset):
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
+        arr = self.clahe.apply(arr)  # FIXME: don't need to apply to entire image, just the crop
         pixels = torch.from_numpy(arr)
         # _min, _max = pixels.min(), pixels.max()
         # pixels -= _min

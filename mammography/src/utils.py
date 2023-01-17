@@ -11,11 +11,6 @@ import numpy.typing as npt
 import pandas as pd
 import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
-
-# from numba import jit
-from pydicom import FileDataset, dcmread
-from pydicom.multival import MultiValue
-from pydicom.pixel_data_handlers.util import apply_windowing
 from torchvision.models.feature_extraction import get_graph_node_names
 from torchvision.transforms import functional_tensor
 
@@ -99,20 +94,20 @@ def to_bit_depth(arr: npt.NDArray[np.uint16], src_depth: int, dest_depth: int) -
     return np.rint(arr).astype(np.uint8)
 
 
-def dicom2numpy(filepath: str) -> Tuple[npt.NDArray, FileDataset]:
-    dcm: FileDataset = dcmread(filepath)
-    arr = dcm.pixel_array
-    return arr, dcm
+# def dicom2numpy(filepath: str) -> Tuple[npt.NDArray, FileDataset]:
+#     dcm: FileDataset = dcmread(filepath)
+#     arr = dcm.pixel_array
+#     return arr, dcm
 
 
-def get_unique_windows(dcm: dicomsdl.DataSet) -> pd.DataFrame:
-    center, width = dcm.get("WindowCenter", None), dcm.get("WindowWidth", None)
-    if not (isinstance(center, MultiValue) and isinstance(width, MultiValue)):
-        center, width = [center], [width]
-    windows = pd.DataFrame({"center": center, "width": width})
-    windows.dropna(inplace=True)
-    windows.drop_duplicates(inplace=True)
-    return windows
+# def get_unique_windows(dcm: dicomsdl.DataSet) -> pd.DataFrame:
+#     center, width = dcm.get("WindowCenter", None), dcm.get("WindowWidth", None)
+#     if not (isinstance(center, MultiValue) and isinstance(width, MultiValue)):
+#         center, width = [center], [width]
+#     windows = pd.DataFrame({"center": center, "width": width})
+#     windows.dropna(inplace=True)
+#     windows.drop_duplicates(inplace=True)
+#     return windows
 
 
 # def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[int] = None) -> None:
@@ -145,18 +140,18 @@ def get_unique_windows(dcm: dicomsdl.DataSet) -> pd.DataFrame:
 #         ax.set_title(title, fontsize="small")
 
 
-def plot_arr(arr: npt.NDArray, dcm: FileDataset, ax: plt.Axes, vmax_base2: Optional[int] = None, **meta) -> None:
-    ax.imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None, cmap="gray")
-    title = [f"{k}={v}" for k, v in meta.items()]
-    title.append(f"pixel_range={arr.min():.2f},{arr.max():.2f}")
-    if dcm.PhotometricInterpretation == "MONOCHROME1":
-        title.append("\nMONOCHROME CORRECTED")
-    if hasattr(dcm, "WindowCenter"):
-        title.append(f"\nwindow center={dcm.WindowCenter}")
-    if hasattr(dcm, "WindowWidth"):
-        title.append(f"window width=\n{dcm.WindowWidth}")
-    title = "\n".join(title)
-    ax.set_title(title, fontsize="small")
+# def plot_arr(arr: npt.NDArray, dcm: FileDataset, ax: plt.Axes, vmax_base2: Optional[int] = None, **meta) -> None:
+#     ax.imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None, cmap="gray")
+#     title = [f"{k}={v}" for k, v in meta.items()]
+#     title.append(f"pixel_range={arr.min():.2f},{arr.max():.2f}")
+#     if dcm.PhotometricInterpretation == "MONOCHROME1":
+#         title.append("\nMONOCHROME CORRECTED")
+#     if hasattr(dcm, "WindowCenter"):
+#         title.append(f"\nwindow center={dcm.WindowCenter}")
+#     if hasattr(dcm, "WindowWidth"):
+#         title.append(f"window width=\n{dcm.WindowWidth}")
+#     title = "\n".join(title)
+#     ax.set_title(title, fontsize="small")
 
 
 # def plot_samples(

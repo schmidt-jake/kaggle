@@ -53,8 +53,8 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
             config_name="submit",
             overrides=[
                 f"+trainer.default_root_dir={train_cfg.trainer.default_root_dir}",
-                "datamodule.image_dir=mammography/data/raw/test_images",
-                "datamodule.metadata_filepath=mammography/data/raw/test.csv",
+                f"datamodule.image_dir={train_cfg.datamodule.image_dir}",
+                f"datamodule.metadata_filepath={train_cfg.datamodule.metadata_filepath}",
                 f"+trainer.logger.id={train_cfg.trainer.logger.id}",
                 f"datamodule.checkpoint_path={ckpt_path}",
                 f"model.checkpoint_path={ckpt_path}",
