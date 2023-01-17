@@ -1,8 +1,8 @@
 # DICOM deps
-# dicomsdl
-pydicom
-pylibjpeg
-pylibjpeg-libjpeg
+dicomsdl
+# pydicom
+# pylibjpeg
+# pylibjpeg-libjpeg
 
 # other stuff
 # functorch<1.13.0  # compatible with torch 1.12.1

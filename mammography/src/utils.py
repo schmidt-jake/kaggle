@@ -1,15 +1,18 @@
 import re
 from glob import glob
 from logging import getLogger
-from math import ceil, log2
 from typing import Optional, Tuple
 
+import dicomsdl
 import matplotlib.pyplot as plt
+import numexpr as ne
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
+
+# from numba import jit
 from pydicom import FileDataset, dcmread
 from pydicom.multival import MultiValue
 from pydicom.pixel_data_handlers.util import apply_windowing
@@ -31,10 +34,10 @@ def inspect_module(module: torch.nn.Module) -> None:
             print(node)
 
 
-def extract_image_id_from_filepath(filepath: str) -> str:
+def extract_image_id_from_filepath(filepath: str) -> int:
     match = re.match(DICOM_FILEPATH, filepath)
     if match is not None:
-        return match.group("image_id")
+        return int(match.group("image_id"))
     raise ValueError(f"Not a valid dicom path: {filepath}")
 
 
@@ -49,23 +52,32 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     Flips `arr` horizontally if the sum of pixels on its left half is greater than its right.
     """
     # Standardize image laterality using pixel values b/c ImageLaterality meta is inaccurate
-    w = arr.shape[1]
-    if arr[:, : w // 2].sum() > arr[:, w // 2 :].sum():
-        # `copy()` to avoid negative stride (https://discuss.pytorch.org/t/torch-from-numpy-not-support-negative-strides/3663)
-        arr = np.flip(arr, axis=1)
+    w = arr.shape[-1]
+    left, right = arr[..., : w // 2], arr[..., w // 2 :]
+    if ne.evaluate("sum(left)") > ne.evaluate("sum(right)"):
+        arr = arr[..., ::-1]
     return arr
 
 
-def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
-    if dcm.PhotometricInterpretation == "MONOCHROME1":
-        # logger.info("Applying MONOCHROME1 correction")
-        arr = 2**dcm.BitsStored - 1 - arr
-    return arr
+def get_suspected_bit_depth(pixel_value: int) -> int:
+    """
+    Returns the smallest even base-2 exponent that is larger than `pixel_value + 1`.
+    """
+    suspected_bit_depth = np.ceil(np.log2(pixel_value + 1))
+    suspected_bit_depth += suspected_bit_depth % 2
+    return suspected_bit_depth.astype(np.float32)
 
 
-def scale_to_01(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.float32]:
-    arr = arr.astype(np.float32) / (2**dcm.BitsStored - 1)
-    return arr
+# def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:
+#     if dcm.PhotometricInterpretation == "MONOCHROME1":
+#         # logger.info("Applying MONOCHROME1 correction")
+#         arr = 2**dcm.BitsStored - 1 - arr
+#     return arr
+
+
+# def scale_to_01(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.float32]:
+#     arr = arr.astype(np.float32) / (2**dcm.BitsStored - 1)
+#     return arr
 
 
 def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
@@ -80,10 +92,11 @@ def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
     return cropped
 
 
+# @jit(nopython=True)
 def to_bit_depth(arr: npt.NDArray[np.uint16], src_depth: int, dest_depth: int) -> npt.NDArray:
     scale_factor = (2**dest_depth - 1) / (2**src_depth - 1)
     arr = arr.astype(np.float32) * scale_factor
-    return np.rint(arr).astype(getattr(np, f"uint{dest_depth}"))
+    return np.rint(arr).astype(np.uint8)
 
 
 def dicom2numpy(filepath: str) -> Tuple[npt.NDArray, FileDataset]:
@@ -92,16 +105,7 @@ def dicom2numpy(filepath: str) -> Tuple[npt.NDArray, FileDataset]:
     return arr, dcm
 
 
-def get_suspected_bit_depth(pixel_value: int) -> int:
-    """
-    Returns the smallest even base-2 exponent that is larger than `pixel_value + 1`.
-    """
-    suspected_bit_depth = ceil(log2(pixel_value + 1))
-    suspected_bit_depth += suspected_bit_depth % 2
-    return suspected_bit_depth
-
-
-def get_unique_windows(dcm: FileDataset) -> pd.DataFrame:
+def get_unique_windows(dcm: dicomsdl.DataSet) -> pd.DataFrame:
     center, width = dcm.get("WindowCenter", None), dcm.get("WindowWidth", None)
     if not (isinstance(center, MultiValue) and isinstance(width, MultiValue)):
         center, width = [center], [width]
@@ -111,34 +115,34 @@ def get_unique_windows(dcm: FileDataset) -> pd.DataFrame:
     return windows
 
 
-def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[int] = None) -> None:
-    fig = plt.figure(figsize=(20, 20))
-    windows = get_unique_windows(dcm)
-    grid = ImageGrid(
-        fig=fig,
-        rect=111,  # similar to subplot(111)
-        nrows_ncols=(1, 1 + len(windows)),
-        axes_pad=(0.0, 0.0),  # pad between axes in inches
-    )
-    grid[0].imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
-    grid[0].set_title(
-        f"Raw\nmin={arr.min()}\nmax={arr.max()}\ndtype={arr.dtype}\nBitsStored={dcm.BitsStored}", fontsize="small"
-    )
-    for ax, (index, window) in zip(grid[1:], windows.iterrows()):
-        windowed = apply_windowing(arr=arr.copy(), ds=dcm, index=index)
-        ax.imshow(windowed, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
-        title = "\n".join(
-            [
-                f"window center={window['center']}",
-                f"window width{window['width']}",
-                f"min={windowed.min():.2f}",
-                f"max={windowed.max():.2f}",
-                f"{windowed.dtype}",
-            ]
-        )
-        if np.allclose(arr, windowed):
-            title += "\nIDENTICAL"
-        ax.set_title(title, fontsize="small")
+# def plot_all_windows(arr: npt.NDArray, dcm: FileDataset, vmax_base2: Optional[int] = None) -> None:
+#     fig = plt.figure(figsize=(20, 20))
+#     windows = get_unique_windows(dcm)
+#     grid = ImageGrid(
+#         fig=fig,
+#         rect=111,  # similar to subplot(111)
+#         nrows_ncols=(1, 1 + len(windows)),
+#         axes_pad=(0.0, 0.0),  # pad between axes in inches
+#     )
+#     grid[0].imshow(arr, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
+#     grid[0].set_title(
+#         f"Raw\nmin={arr.min()}\nmax={arr.max()}\ndtype={arr.dtype}\nBitsStored={dcm.BitsStored}", fontsize="small"
+#     )
+#     for ax, (index, window) in zip(grid[1:], windows.iterrows()):
+#         windowed = apply_windowing(arr=arr.copy(), ds=dcm, index=index)
+#         ax.imshow(windowed, vmin=0, vmax=2**vmax_base2 - 1 if vmax_base2 is not None else None)
+#         title = "\n".join(
+#             [
+#                 f"window center={window['center']}",
+#                 f"window width{window['width']}",
+#                 f"min={windowed.min():.2f}",
+#                 f"max={windowed.max():.2f}",
+#                 f"{windowed.dtype}",
+#             ]
+#         )
+#         if np.allclose(arr, windowed):
+#             title += "\nIDENTICAL"
+#         ax.set_title(title, fontsize="small")
 
 
 def plot_arr(arr: npt.NDArray, dcm: FileDataset, ax: plt.Axes, vmax_base2: Optional[int] = None, **meta) -> None:
@@ -155,25 +159,25 @@ def plot_arr(arr: npt.NDArray, dcm: FileDataset, ax: plt.Axes, vmax_base2: Optio
     ax.set_title(title, fontsize="small")
 
 
-def plot_samples(
-    *args: Tuple[pd.DataFrame, Optional[int], bool],
-    n: int = 10,
-    unique_patients: bool = True,
-    random_seed: Optional[int] = None,
-) -> None:
-    fig = plt.figure(figsize=(20, 20))
-    grid = ImageGrid(
-        fig=fig,
-        rect=111,  # similar to subplot(111)
-        nrows_ncols=(len(args), n),
-        axes_pad=(0.0, 1.0),  # pad between axes in inches
-    )
-    for (df, vmax_base2, should_apply_window_fn), ax in zip(args, grid.axes_row):
-        if unique_patients:
-            df = df.groupby("patient_id").sample(n=1, random_state=random_seed)
-        sample = df.sample(n=n, random_state=random_seed)
-        for a, row in zip(ax, sample.to_dict("records")):
-            filepath = find_filepath(row["image_id"])
-            arr, dcm = dicom2numpy(filepath, should_apply_window_fn=should_apply_window_fn)
-            # arr = cv2.resize(arr, (256, 256))
-            plot_arr(arr=arr, dcm=dcm, ax=a, vmax_base2=vmax_base2, **row)
+# def plot_samples(
+#     *args: Tuple[pd.DataFrame, Optional[int], bool],
+#     n: int = 10,
+#     unique_patients: bool = True,
+#     random_seed: Optional[int] = None,
+# ) -> None:
+#     fig = plt.figure(figsize=(20, 20))
+#     grid = ImageGrid(
+#         fig=fig,
+#         rect=111,  # similar to subplot(111)
+#         nrows_ncols=(len(args), n),
+#         axes_pad=(0.0, 1.0),  # pad between axes in inches
+#     )
+#     for (df, vmax_base2, should_apply_window_fn), ax in zip(args, grid.axes_row):
+#         if unique_patients:
+#             df = df.groupby("patient_id").sample(n=1, random_state=random_seed)
+#         sample = df.sample(n=n, random_state=random_seed)
+#         for a, row in zip(ax, sample.to_dict("records")):
+#             filepath = find_filepath(row["image_id"])
+#             arr, dcm = dicom2numpy(filepath, should_apply_window_fn=should_apply_window_fn)
+#             # arr = cv2.resize(arr, (256, 256))
+#             plot_arr(arr=arr, dcm=dcm, ax=a, vmax_base2=vmax_base2, **row)

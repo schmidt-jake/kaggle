@@ -9,16 +9,27 @@
 ## Visual edge cases
 
 1. Low contrast
-    1. 2057295788
-    1. 610638958
-    1. 2027498278
     1. 858907922 — implant
 1. Nipple markers
     1. 2030427504
 1. Circles
     1. 2049957533
+1. Overcropped
+    1. 1181948538
+    1. 1428845821
+    1. 2121614268
+1. Artificial border
+    1. 47305213
+    1. 42887848
+    1. 33429299
+    1. 32630261
+    1. 2124758121
+    1. 29003881
+    1. 26934018
 1. Other artifacts
-    1. 975386553
+    1. 1942326353 — all zeros
+    1. 495314563 — high background value
+    1. 1760744211 — two bright horizontal stripes
 
 ## Kaggle compute resources
 
@@ -38,3 +49,22 @@
   - CUDA version: 11.4
   - GPU RAM: 16280MiB
   - PyTorch version: 1.11.0
+
+## Profiling
+
+### Image preprocessing
+
+Pydicom is much slower than dicomsdl + numexpr
+
+Dicomsdl results for processing 100 files:
+
+| OpenCV threads | Numexpr threads | Processes | context | wall time |
+|----------------|-----------------|-----------|---------|-----------|
+|       0        |        1        |     8     |   fork  |    33.5   |
+|       0        |        1        |     8     |  spawn  |    38.3   |
+|       0        |        2        |     8     |   fork  |    34.0   |
+|       0        |        8        |     8     |   fork  |    34.6   |
+|       0        |        8        |     8     |  spawn  |    35.9   |
+|       0        |        1        |     4     |   fork  |    35.2   |
+|       0        |        1        |     2     |   fork  |    53.3   |
+|       0        |        2        |     4     |   fork  |    33.9   |

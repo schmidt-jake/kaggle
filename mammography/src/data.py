@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, Generator, Set, Tuple
 
 import cv2
@@ -34,6 +35,7 @@ def extract_dicom(filepath: str) -> Generator[Tuple[npt.NDArray, int], None, Non
         if fn == "linear" and window["center"] > pixel_max:
             arr = raw_arr.copy()
         else:
+            print(filepath, window)
             arr = apply_windowing(arr=raw_arr.copy(), ds=dcm, index=index)
         pixel_bit_depth = utils.get_suspected_bit_depth(pixel_value=int(arr.max()))
         if dcm.PhotometricInterpretation == "MONOCHROME1":
@@ -41,6 +43,7 @@ def extract_dicom(filepath: str) -> Generator[Tuple[npt.NDArray, int], None, Non
         arr = utils.to_bit_depth(arr, src_depth=pixel_bit_depth, dest_depth=8)
         arr = utils.maybe_flip_left(arr=arr)
         yield arr, index
+        break
 
 
 class DataframeDataPipe(Dataset):
@@ -95,9 +98,10 @@ class DataframeDataPipe(Dataset):
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
         pixels = torch.from_numpy(arr.astype(np.float32))
-        _min, _max = pixels.min(), pixels.max()
-        pixels -= _min
-        pixels /= _max - _min
+        # _min, _max = pixels.min(), pixels.max()
+        # pixels -= _min
+        # pixels /= _max - _min
+        pixels /= 255.0
         pixels.unsqueeze_(dim=0)
         pixels = utils.crop_right_center(pixels, size=2048)
         pixels = functional_tensor.resize(pixels, size=512)
@@ -123,10 +127,14 @@ class DataModule(LightningDataModule):
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams.augmentation)
         self.num_workers = torch.multiprocessing.cpu_count()
         self.prefetch = max(self.hparams.prefetch_batches * self.hparams.batch_size // max(self.num_workers, 1), 2)
+        self.filepath_format = os.path.join(self.image_dir, "{image_id}.png")
 
     @staticmethod
     def compute_class_weights(y: pd.Series) -> pd.Series:
         return len(y) / (y.nunique() * y.value_counts())
+
+    def _format_filepath(self, row: pd.Series):
+        return self.filepath_format(**row)
 
     def _use_artifact(self) -> None:
         if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
@@ -139,12 +147,10 @@ class DataModule(LightningDataModule):
 
     def setup(self, stage: str) -> None:
         self.df = pd.read_csv(self.metadata_filepath)
-        self.df["filepath"] = (
-            self.image_dir + "/" + self.df["patient_id"].astype(str) + "/" + self.df["image_id"].astype(str) + ".dcm"
-        )
+        self.df["filepath"] = self.df.apply(self._format_filepath, axis=1)
         if stage == "fit":
-            self.df.query("patient_id != 27770", inplace=True)
-            self.df.query("image_id != 1942326353", inplace=True)
+            # self.df.query("patient_id != 27770", inplace=True)
+            # self.df.query("image_id != 1942326353", inplace=True)
             class_weights = 1.0 / self.df["cancer"].value_counts()
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
             self.cancer_base_rate = self.df["cancer"].mean()
