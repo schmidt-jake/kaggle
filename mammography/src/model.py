@@ -57,6 +57,7 @@ class Model(pl.LightningModule):
         self.save_hyperparameters()
         self.logger: "WandbLogger"
         self.feature_extractor: torch.nn.Module = instantiate(self.hparams.feature_extractor)
+        self.logger.watch(self.feature_extractor, log="all", log_freq=self.trainer.log_every_n_steps, log_graph=True)
         self.classifier: torch.nn.Module = instantiate(self.hparams.classifier)
         self.train_metrics = MetricCollection(
             {
