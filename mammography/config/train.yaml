@@ -43,7 +43,7 @@ datamodule:
   _target_: mammography.src.data.DataModule
   metadata_filepath: ???
   image_dir: ???
-  batch_size: 23
+  batch_size: 16
   prefetch_batches: 3
   augmentation:
     _target_: torch.nn.Sequential
