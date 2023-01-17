@@ -19,6 +19,13 @@ def train(cfg: DictConfig) -> None:
     trainer: "Trainer" = instantiate(cfg.trainer)
     datamodule: "LightningDataModule" = instantiate(cfg.datamodule, _recursive_=False)
     model: "LightningModule" = instantiate(cfg.model, _recursive_=False)
+    trainer.logger.watch(
+        model.feature_extractor,
+        log="all",
+        # log_freq=trainer.log_every_n_steps,
+        log_freq=25,
+        log_graph=True,
+    )
     trainer.fit(model=model, datamodule=datamodule)
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")

@@ -29,7 +29,6 @@ class DataframeDataPipe(Dataset):
         self.df = df
         self.augmentation = augmentation
         self.keys = keys
-        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
     def __len__(self) -> int:
         return len(self.df)
@@ -44,11 +43,7 @@ class DataframeDataPipe(Dataset):
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
-        arr = self.clahe.apply(arr)  # FIXME: don't need to apply to entire image, just the crop
         pixels = torch.from_numpy(arr)
-        # _min, _max = pixels.min(), pixels.max()
-        # pixels -= _min
-        # pixels /= _max - _min
         pixels.unsqueeze_(dim=0)
         pixels = utils.crop_right_center(pixels, size=2048)
         pixels = functional_tensor.resize(pixels, size=512)

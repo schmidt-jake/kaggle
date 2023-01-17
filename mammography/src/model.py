@@ -113,9 +113,6 @@ class Model(pl.LightningModule):
                 # pos_weight=torch.tensor(self.trainer.datamodule.class_weights[1]),  # type: ignore[attr-defined]
             )
             self._init_metrics()
-            self.logger.watch(
-                self.feature_extractor, log="all", log_freq=self.trainer.log_every_n_steps, log_graph=True
-            )
             # for m in self.modules():
             #     if isinstance(m, torch.nn.Conv2d):
             #         torch.nn.init.kaiming_normal_(m.weight)
