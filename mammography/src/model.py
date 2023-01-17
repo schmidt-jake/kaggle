@@ -107,8 +107,8 @@ class Model(pl.LightningModule):
         return np.log(p / (1 - p))
 
     def setup(self, stage: str) -> None:
-        self.example_input_array = torch.rand(
-            size=(self.trainer.datamodule.hparams.batch_size, 1, 512, 512), dtype=torch.float32
+        self.example_input_array = torch.randint(
+            low=0, high=255, size=(self.trainer.datamodule.hparams.batch_size, 1, 512, 512), dtype=torch.uint8
         )
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss(
@@ -132,6 +132,7 @@ class Model(pl.LightningModule):
         # features: torch.Tensor = checkpoint_sequential(
         #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
         # )
+        x = x.float() / 255.0
         features: torch.Tensor = self.feature_extractor(x)
         predictions: torch.Tensor = self.classifier(features)
         # predictions: torch.Tensor = checkpoint_sequential(

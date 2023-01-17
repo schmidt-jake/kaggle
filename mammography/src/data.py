@@ -97,11 +97,10 @@ class DataframeDataPipe(Dataset):
         logger.debug(f"Loading image {row['image_id']}")
         d = row.to_dict()
         arr = self._read(filepath=row["filepath"])
-        pixels = torch.from_numpy(arr.astype(np.float32))
+        pixels = torch.from_numpy(arr)
         # _min, _max = pixels.min(), pixels.max()
         # pixels -= _min
         # pixels /= _max - _min
-        pixels /= 255.0
         pixels.unsqueeze_(dim=0)
         pixels = utils.crop_right_center(pixels, size=2048)
         pixels = functional_tensor.resize(pixels, size=512)
