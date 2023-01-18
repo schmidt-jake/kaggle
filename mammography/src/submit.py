@@ -33,13 +33,10 @@ class SubmissionWriter(BasePredictionWriter):
             for key, tensor in batch.items():
                 preds[key].extend(tensor.cpu().numpy())
         predictions = pd.DataFrame(preds)
-        test_df: pd.DataFrame = trainer.datamodule.df.merge(
-            pd.DataFrame(predictions), on="image_id", how="outer", validate="1:1"
-        )
-        test_df["prediction_id"] = test_df["patient_id"].astype(str) + "_" + test_df["laterality"]
-        test_df["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)
-        test_df = test_df.groupby("prediction_id", as_index=False)["cancer"].mean()
-        test_df.to_csv(self.output_filepath, index=False)
+        predictions["prediction_id"] = predictions["patient_id"].astype(str) + "_" + predictions["laterality"]
+        predictions["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)
+        predictions = predictions.groupby("prediction_id", as_index=False)["cancer"].mean()
+        predictions.to_csv(self.output_filepath, index=False)
 
 
 @hydra.main(config_path="../config", config_name="submit", version_base=None)

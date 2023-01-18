@@ -176,7 +176,12 @@ class Model(pl.LightningModule):
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         logit: torch.Tensor = self(batch["pixels"])
-        return {"image_id": batch["image_id"], "cancer": logit.sigmoid()}
+        return {
+            "image_id": batch["image_id"],
+            "cancer": logit.sigmoid(),
+            "patient_id": batch["patient_id"],
+            "laterality": batch["laterality"],
+        }
 
     def configure_optimizers(self) -> Dict[str, Any]:
         config = instantiate(self.hparams.optimizer_config)

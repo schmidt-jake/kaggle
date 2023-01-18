@@ -58,6 +58,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 f"+trainer.logger.id={train_cfg.trainer.logger.id}",
                 f"datamodule.checkpoint_path={ckpt_path}",
                 f"model.checkpoint_path={ckpt_path}",
+                "+trainer.limit_predict_batches=1",
             ],
         )
         submit(submit_cfg)

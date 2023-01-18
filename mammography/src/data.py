@@ -135,7 +135,9 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         pipe = DataframeDataPipe(
-            self.df, augmentation=self.augmentation.eval(), keys={"pixels", "cancer", "image_id"}
+            self.df,
+            augmentation=self.augmentation.eval(),
+            keys={"pixels", "cancer", "image_id", "patient_id", "laterality"},
         )  # .to_iter_datapipe()
         return DataLoader(
             dataset=pipe,
