@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import hydra
 import pandas as pd
@@ -29,9 +29,11 @@ class SubmissionWriter(BasePredictionWriter):
             logger.warning(f"Expected predictions len 1 but got {len(predictions)}")
         preds = defaultdict(list)
         for batch in predictions[0]:
-            batch: Dict[str, torch.Tensor]
-            for key, tensor in batch.items():
-                preds[key].extend(tensor.cpu().numpy())
+            batch: Dict[str, Union[torch.Tensor, List[str]]]
+            for key, val in batch.items():
+                if isinstance(val, torch.Tensor):
+                    val = val.cpu().numpy()
+                preds[key].extend(val)
         predictions = pd.DataFrame(preds)
         predictions["prediction_id"] = predictions["patient_id"].astype(str) + "_" + predictions["laterality"]
         predictions["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)

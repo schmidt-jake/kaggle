@@ -1,6 +1,6 @@
 import logging
 from inspect import signature
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -166,7 +166,7 @@ class Model(pl.LightningModule):
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
+    def validation_step(self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int) -> None:
         logit: torch.Tensor = self(batch["pixels"])
         preds = logit.sigmoid()
         # self.logger.experiment.log({"predictions/val": wandb.Histogram(prediction.detach().cpu())}, step=self.global_step)
@@ -174,7 +174,9 @@ class Model(pl.LightningModule):
         self.val_metrics(preds=preds, target=batch["cancer"], value=loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
-    def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
+    def predict_step(
+        self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int
+    ) -> Dict[str, Union[torch.Tensor, List[str]]]:
         logit: torch.Tensor = self(batch["pixels"])
         return {
             "image_id": batch["image_id"],
