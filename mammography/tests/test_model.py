@@ -37,7 +37,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "datamodule.image_dir=mammography/data/png",
                 "datamodule.metadata_filepath=mammography/data/png/train.csv",
                 "datamodule.batch_size=2",
-                "datamodule.prefetch_batches=0",
+                "datamodule.prefetch_factor=2",
                 "+trainer.detect_anomaly=true",
                 "trainer.benchmark=false",
                 "+trainer.logger.mode=offline",
@@ -59,6 +59,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 f"datamodule.checkpoint_path={ckpt_path}",
                 f"model.checkpoint_path={ckpt_path}",
                 "+trainer.limit_predict_batches=1",
+                "datamodule.prefetch_factor=2",
             ],
         )
         submit(submit_cfg)
