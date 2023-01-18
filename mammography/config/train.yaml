@@ -43,7 +43,7 @@ datamodule:
   metadata_filepath: ???
   image_dir: ???
   batch_size: 20
-  prefetch_batches: 3
+  prefetch_factor: 3
   augmentation:
     _target_: torch.nn.Sequential
     _args_:

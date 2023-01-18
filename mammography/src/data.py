@@ -60,15 +60,15 @@ class DataModule(LightningDataModule):
         image_dir: str,
         augmentation: DictConfig,
         batch_size: int,
-        prefetch_batches: int,
+        prefetch_factor: int,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["metadata_filepath", "image_dir"])
+        self.save_hyperparameters("augmentation", "batch_size")
         self.metadata_filepath = metadata_filepath
         self.image_dir = image_dir
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams.augmentation)
         self.num_workers = torch.multiprocessing.cpu_count()
-        self.prefetch = max(self.hparams.prefetch_batches * self.hparams.batch_size // max(self.num_workers, 1), 2)
+        self.prefetch_factor = prefetch_factor
         self.filepath_format = os.path.join(self.image_dir, "{image_id}_0.png")
 
     @staticmethod
@@ -114,7 +114,7 @@ class DataModule(LightningDataModule):
             batch_size=self.hparams.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
-            prefetch_factor=self.prefetch,
+            prefetch_factor=self.prefetch_factor,
             sampler=WeightedRandomSampler(
                 weights=self.df["sample_weight"],
                 num_samples=len(self.df),
@@ -145,7 +145,7 @@ class DataModule(LightningDataModule):
             shuffle=False,
             pin_memory=True,
             num_workers=self.num_workers,
-            prefetch_factor=self.prefetch,
+            prefetch_factor=self.prefetch_factor,
             drop_last=False,
         )
 

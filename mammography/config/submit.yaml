@@ -18,6 +18,7 @@ datamodule:
   checkpoint_path: ???
   metadata_filepath: ???
   image_dir: ???
+  prefetch_factor: 4
 model:
   _target_: mammography.src.model.Model.load_from_checkpoint
   checkpoint_path: ???
