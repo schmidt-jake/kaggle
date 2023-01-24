@@ -12,7 +12,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
-from torchvision.transforms import functional_tensor
 
 from mammography.src import utils
 
@@ -21,6 +20,18 @@ from mammography.src import utils
 
 
 logger = logging.getLogger(__name__)
+
+
+class MinMaxScale(torch.nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.float()
+        _min = x.amin(dim=(-2, -1))
+        _max = x.amax(dim=(-2, -1))
+        x -= _min
+        x /= (_max - _min) / 255.0
+        x.round_()
+        x.clamp_(0.0, 255.0)
+        return x.byte()
 
 
 class CropCenterRight(torch.nn.Module):
@@ -97,10 +108,10 @@ class DataModule(LightningDataModule):
         self.df = pd.read_csv(self.metadata_filepath)
         self.df["filepath"] = self.df.apply(self._format_filepath, axis=1)
         if stage == "fit":
-            # self.df.query("patient_id != 27770", inplace=True)
-            # self.df.query("image_id != 1942326353", inplace=True)
-            # class_weights = 1.0 / self.df["cancer"].value_counts()
-            class_weights = self.df["cancer"].value_counts(normalize=True)
+            self.df.query("patient_id != 27770", inplace=True)
+            self.df.query("image_id != 1942326353", inplace=True)
+            class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
+            # class_weights = self.df["cancer"].value_counts(normalize=True)
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
             self.cancer_base_rate = self.df["cancer"].mean()
 

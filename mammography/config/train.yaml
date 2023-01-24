@@ -20,8 +20,8 @@ trainer:
       patience: 5
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
-  gradient_clip_val: 1.0
-  gradient_clip_algorithm: value
+  # gradient_clip_val: 1.0
+  # gradient_clip_algorithm: value
   log_every_n_steps: 1
   num_sanity_val_steps: 0
   benchmark: true
@@ -52,6 +52,7 @@ datamodule:
       - _target_: torchvision.transforms.Resize
         _convert_: object
         size: 512
+      - _target_: mammography.src.data.MinMaxScale
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
       #   _convert_: object
