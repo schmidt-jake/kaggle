@@ -42,16 +42,16 @@ datamodule:
   _target_: mammography.src.data.DataModule
   metadata_filepath: ???
   image_dir: ???
-  batch_size: 20
+  batch_size: 8
   prefetch_factor: 3
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
+      - _target_: mammography.src.data.CropCenterRight
+        size: 2048
       - _target_: torchvision.transforms.Resize
         _convert_: object
-        size:
-          - 512
-          - 512
+        size: 512
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
       #   _convert_: object
@@ -87,10 +87,10 @@ model:
     _target_: mammography.src.model.replace_submodules
     _convert_: all
     module:
-      _target_: torchvision.models.densenet161
+      _target_: torchvision.models.efficientnet_b4
       drop_rate: 0.0
       num_classes: 1
-    features.conv0:
+    features.0.0:
       in_channels: 1
 seed_fn:
   _target_: lightning_lite.utilities.seed.seed_everything

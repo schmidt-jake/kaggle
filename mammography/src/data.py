@@ -23,6 +23,15 @@ from mammography.src import utils
 logger = logging.getLogger(__name__)
 
 
+class CropCenterRight(torch.nn.Module):
+    def __init__(self, size: int) -> None:
+        super().__init__()
+        self.size = size
+
+    def forward(self, img: torch.Tensor) -> torch.Tensor:
+        return utils.crop_right_center(img=img, size=self.size)
+
+
 class DataframeDataPipe(Dataset):
     def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set) -> None:
         super().__init__()
@@ -45,10 +54,7 @@ class DataframeDataPipe(Dataset):
         arr = self._read(filepath=row["filepath"])
         pixels = torch.from_numpy(arr)
         pixels.unsqueeze_(dim=0)
-        pixels = utils.crop_right_center(pixels, size=2048)
-        pixels = functional_tensor.resize(pixels, size=512)
-        # d["pixels"] = self.augmentation(pixels)
-        d["pixels"] = pixels
+        d["pixels"] = self.augmentation(pixels)
         d = {k: v for k, v in d.items() if k in self.keys}
         return d
 
