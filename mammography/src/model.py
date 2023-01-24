@@ -59,7 +59,7 @@ class Model(pl.LightningModule):
         self.train_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
-                "accuracy": BinaryAccuracy(validate_args=False),
+                "accuracy": BinaryAccuracy(validate_args=True),
                 "loss": MeanMetric(nan_strategy="error"),
                 # "predictions": CatMetric(nan_strategy="error"),
             },
@@ -69,11 +69,11 @@ class Model(pl.LightningModule):
         self.val_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
-                "accuracy": BinaryAccuracy(validate_args=False),
+                "accuracy": BinaryAccuracy(validate_args=True),
                 "loss": MeanMetric(nan_strategy="error"),
                 # "roc": BinaryROC(validate_args=False),
-                "auroc": BinaryAUROC(validate_args=False),
-                "calibration_error": BinaryCalibrationError(validate_args=False),
+                "auroc": BinaryAUROC(validate_args=True),
+                "calibration_error": BinaryCalibrationError(validate_args=True),
             },
             prefix="metrics/",
             postfix="/val",

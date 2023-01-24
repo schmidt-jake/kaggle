@@ -52,7 +52,10 @@ datamodule:
       - _target_: torchvision.transforms.Resize
         _convert_: object
         size: 512
-      - _target_: mammography.src.data.MinMaxScale
+      # - _target_: mammography.src.data.MinMaxScale
+      - _target_: mammography.src.data.PercentileScale
+        min: 0.005
+        max: 0.995
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
       #   _convert_: object

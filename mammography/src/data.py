@@ -34,6 +34,22 @@ class MinMaxScale(torch.nn.Module):
         return x.byte()
 
 
+class PercentileScale(torch.nn.Module):
+    def __init__(self, min: float, max: float) -> None:
+        super().__init__()
+        self.register_buffer("percentiles", torch.tensor([min, max]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.float()
+        q = x.flatten(start_dim=1).quantile(q=self.get_buffer("percentiles"), dim=1)
+        _min, _max = q[0], q[1]
+        x -= _min
+        x /= (_max - _min) / 255.0
+        x.round_()
+        x.clamp_(0.0, 255.0)
+        return x.byte()
+
+
 class CropCenterRight(torch.nn.Module):
     def __init__(self, size: int) -> None:
         super().__init__()
