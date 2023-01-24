@@ -127,16 +127,11 @@ class Model(pl.LightningModule):
             # torch.nn.init.zeros_(self.classifier[-1].weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # features: torch.Tensor = checkpoint_sequential(
-        #     self.feature_extractor, segments=5, input=x, preserve_rng_state=False
-        # )
         x = x.float()
         x /= 255.0
         predictions: torch.Tensor = self.feature_extractor(x)
-        # predictions: torch.Tensor = checkpoint_sequential(
-        #     self.classifier, segments=2, input=features, preserve_rng_state=False
-        # )
-        return predictions.squeeze(dim=1)
+        predictions.squeeze_(dim=1)
+        return predictions
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         logit: torch.Tensor = self(batch["pixels"])
@@ -150,7 +145,7 @@ class Model(pl.LightningModule):
         #     step=self.global_step,
         # )
         if self.global_step == 0 and self.global_rank == 0:
-            pixels: npt.NDArray[np.float32] = batch["pixels"].detach().cpu().numpy()
+            pixels: npt.NDArray[np.uint8] = batch["pixels"].detach().cpu().numpy()
             cancer = batch["cancer"].detach().cpu().numpy()
             self.logger.log_image(
                 key="input_batch",

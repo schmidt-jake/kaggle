@@ -99,7 +99,8 @@ class DataModule(LightningDataModule):
         if stage == "fit":
             # self.df.query("patient_id != 27770", inplace=True)
             # self.df.query("image_id != 1942326353", inplace=True)
-            class_weights = 1.0 / self.df["cancer"].value_counts()
+            # class_weights = 1.0 / self.df["cancer"].value_counts()
+            class_weights = self.df["cancer"].value_counts(normalize=True)
             self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
             self.cancer_base_rate = self.df["cancer"].mean()
 
