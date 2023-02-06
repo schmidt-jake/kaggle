@@ -62,7 +62,11 @@ def main(metadata_path: str, input_dir: str, output_dir: str) -> None:
         meta = pd.read_pickle(metadata_path)
     else:
         raise ValueError(f"Unrecognized suffix: {metadata_path}")
-    filepaths = input_dir + meta["patient_id"].astype(str) + "/" + meta["image_id"].astype(str) + ".dcm"
+    filepaths = [
+        os.path.join(input_dir, str(row["patient_id"]), f"{image_id}.dcm")
+        for _, row in meta.iterrows()
+        for image_id in row["CC"] + row["MLO"]
+    ]
     logger.info("Preprocessing images...")
     with Pool() as pool, logging_redirect_tqdm():
         pool.map(
