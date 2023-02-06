@@ -1,22 +1,26 @@
 import re
 from glob import glob
 from logging import getLogger
-from typing import Optional, Tuple
 
-import dicomsdl
-import matplotlib.pyplot as plt
+# import dicomsdl
+# import matplotlib.pyplot as plt
 import numexpr as ne
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
+
+# import pandas as pd
 import torch
-from mpl_toolkits.axes_grid1 import ImageGrid
+
+# from mpl_toolkits.axes_grid1 import ImageGrid
 from torchvision.models.feature_extraction import get_graph_node_names
 from torchvision.transforms import functional_tensor
 
+# from typing import Optional, Tuple
+
+
 logger = getLogger(__name__)
 
-DICOM_FILEPATH = re.compile(r"^[\w/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.dcm$")
+DICOM_FILEPATH = re.compile(r"^[\w\-/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.dcm$")
 
 
 def inspect_module(module: torch.nn.Module) -> None:

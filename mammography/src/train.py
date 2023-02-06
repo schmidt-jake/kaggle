@@ -10,11 +10,10 @@ from pytorch_lightning.profilers import PyTorchProfiler
 if TYPE_CHECKING:
     from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 
-logger = logging.getLogger(__name__)
-
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
 def train(cfg: DictConfig) -> None:
+    logging.basicConfig(level=logging.INFO)
     instantiate(cfg.seed_fn)
     trainer: "Trainer" = instantiate(cfg.trainer)
     datamodule: "LightningDataModule" = instantiate(cfg.datamodule, _recursive_=False)
@@ -34,5 +33,4 @@ def train(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     train()

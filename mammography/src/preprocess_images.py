@@ -1,5 +1,7 @@
+import logging
 import os
-from logging import getLogger
+from argparse import ArgumentParser
+from functools import partial
 from multiprocessing.pool import Pool
 
 import cv2
@@ -7,11 +9,12 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from mammography.src import utils
 from mammography.src.dicomsdl import process_dicom
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def breast_mask(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint16]:
@@ -32,48 +35,43 @@ def crop_and_mask(img: npt.NDArray[np.uint8], mask: npt.NDArray[np.uint8]) -> np
     return cropped * mask
 
 
-def process_image(filepath: str) -> None:
-    cv2.setNumThreads(0)
+def process_image(filepath: str, output_dir: str) -> None:
     image_id = utils.extract_image_id_from_filepath(filepath)
-    subdir = f"mammography/data/png/{image_id}"
-    if os.path.exists(subdir + "_0.png"):
-        return
     windows = process_dicom(filepath)
     thresh, mask = breast_mask(windows.max(axis=0))
     if thresh > 5.0:
         logger.warning(f"Got suspiciously high threshold of {thresh} for {filepath}")
     cropped = crop_and_mask(windows, mask)
+    if cropped.shape[1] < 512 or cropped.shape[2] < 512:
+        logger.warning(f"Crop shape {cropped.shape} too small. Image ID: {image_id}")
     for i, window in enumerate(cropped):
-        cv2.imwrite(filename=f"{subdir}_{i}.png", img=window, params=[cv2.IMWRITE_PNG_COMPRESSION, 0])
+        cv2.imwrite(
+            filename=f"{output_dir}/{image_id}_{i}.png",
+            img=window,
+            params=[cv2.IMWRITE_PNG_COMPRESSION, 0],
+        )
 
 
-def main() -> None:
-    meta = pd.read_csv("mammography/data/raw/train.csv")
-    meta.query("patient_id != 27770", inplace=True)
-    meta.query("image_id != 1942326353", inplace=True)
-    meta.drop_duplicates("patient_id", inplace=True)
-    # meta = meta.sample(n=5000, random_state=42)
-    meta.sort_values("image_id", inplace=True)
-    filepaths = (
-        "mammography/data/raw/train_images/"
-        + meta["patient_id"].astype(str)
-        + "/"
-        + meta["image_id"].astype(str)
-        + ".dcm"
-    )
-    meta.to_csv("mammography/data/png/train.csv", index=False)
-
-    with Pool() as pool:
-        pool.map(process_image, tqdm(filepaths, smoothing=0))
-
-    # filepaths = sorted(glob("mammography/data/raw/train_images/*/*.dcm"), key=utils.extract_image_id_from_filepath)
-    # filepaths = filepaths[:100]
-    # with Pool(4, context=get_context("fork")) as pool:
-    #     pool.map(process_image, filepaths[:10], chunksize=None)
-    #     t = time()
-    #     pool.map(process_image, tqdm(filepaths, smoothing=1), chunksize=None)
-    #     print(time() - t)
+def main(metadata_path: str, input_dir: str, output_dir: str) -> None:
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Beginning job...")
+    meta = pd.read_csv(metadata_path)
+    filepaths = input_dir + meta["patient_id"].astype(str) + "/" + meta["image_id"].astype(str) + ".dcm"
+    logger.info("Preprocessing images...")
+    with Pool() as pool, logging_redirect_tqdm():
+        pool.map(
+            partial(process_image, output_dir=output_dir),
+            tqdm(filepaths, smoothing=0, desc="preprocessing images..."),
+            chunksize=10,
+        )
+    logger.info("Done!")
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("input_dir", type=str)
+    parser.add_argument("metadata_path", type=str)
+    parser.add_argument("output_dir", type=str)
+    args = parser.parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
+    main(**vars(args))

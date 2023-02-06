@@ -1,0 +1,23 @@
+# https://cloud.google.com/vertex-ai/docs/reference/rest/v1/CustomJobSpec
+workerPoolSpecs:
+  machineSpec:
+    # https://cloud.google.com/vertex-ai/docs/training/configure-compute#specifying_gpus
+    machineType: n1-standard-8
+    acceleratorType: NVIDIA_TESLA_P100
+    acceleratorCount: 1
+  replicaCount: 1
+  containerSpec:
+    imageUri: us-central1-docker.pkg.dev/rnsa-breast-cancer-detection/containers/mammography:0.1
+    # command:
+    #   - python
+    #   - -m
+    #   - mammography.src.preprocess_images
+    args:
+      - trainer.logger.save_dir=/gcs/rnsa-kaggle/runs
+      - datamodule.image_dir=/gcs/rnsa-kaggle/data/png
+      - +trainer.accelerator=gpu
+      # - +trainer.limit_train_batches=10
+      # - +trainer.limit_val_batches=10
+    env:
+      - name: WANDB_API_KEY
+        value: c504c252cc71d0f0938b630b856c8b71c09c3af9

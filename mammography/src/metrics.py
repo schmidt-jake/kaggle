@@ -25,5 +25,5 @@ class ProbabilisticBinaryF1Score(Metric):
         c_precision: torch.Tensor = self.ctp / (self.ctp + self.cfp)  # type: ignore[operator]
         c_recall: torch.Tensor = self.ctp / self.y_true_count  # type: ignore[operator]
         result = 2 * (c_precision * c_recall) / (c_precision + c_recall)
-        result.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
+        result.nan_to_num_(nan=0.0)
         return result

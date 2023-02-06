@@ -36,8 +36,8 @@ class SubmissionWriter(BasePredictionWriter):
                 preds[key].extend(val)
         predictions = pd.DataFrame(preds)
         predictions["prediction_id"] = predictions["patient_id"].astype(str) + "_" + predictions["laterality"]
-        predictions["cancer"].fillna(trainer.datamodule.cancer_base_rate, inplace=True)
-        predictions = predictions.groupby("prediction_id", as_index=False)["cancer"].mean()
+        # predictions["cancer"].fillna(pl_module.hparams["cancer_base_rate"], inplace=True)
+        predictions = predictions.groupby("prediction_id", as_index=False)["cancer"].max()
         predictions.to_csv(self.output_filepath, index=False)
 
 

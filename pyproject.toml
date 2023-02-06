@@ -1,8 +1,27 @@
 [project]
-name = "kaggle"
-description = "Kaggle competition monorepo"
-readme = "README.md"
-python = "^3.10"
+name = "mammography"
+dynamic = ["version"]
+dependencies = [
+    "dicomsdl",
+    "fsspec[gcs]",
+    "hydra-core",
+    "numexpr",
+    "opencv-python-headless",
+    "pandas",
+    "pytorch-lightning",
+    "torch==1.11.0",
+    "torchmetrics",
+    "torchvision==0.12.0",
+    "wandb<0.13.8",
+]
+
+# [project.scripts]
+# train = "mammography.src.train:train"
+# submit = "mammography.src.submit:submit"
+
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
 
 [tool.flake8]
 max-line-length = 120
@@ -25,6 +44,11 @@ line-length = 120
 target-version = ["py310"]
 
 [tool.pytest.ini_options]
-addopts = ["-s", "--typeguard-packages=mayo_clinic_strip_ai,mammography,tests"]
+# addopts = ["-s", "--typeguard-packages=mayo_clinic_strip_ai,mammography,tests"]
 log_cli = true
 log_cli_level = "INFO"
+
+[tool.setuptools_scm]
+
+[tool.setuptools]
+packages = ["mammography.src", "mammography.config"]

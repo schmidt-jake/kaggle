@@ -14,24 +14,18 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from mammography.src import utils
-
-# from torchdata.dataloader2 import DataLoader2, PrototypeMultiProcessingReadingService
-# from torchdata.datapipes.map import MapDataPipe
-
+from mammography.src.sampler import BreastSampler
 
 logger = logging.getLogger(__name__)
 
 
 class MinMaxScale(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.float()
-        _min = x.amin(dim=(-2, -1))
-        _max = x.amax(dim=(-2, -1))
+        _min = x.amin(dim=(-2, -1), keepdim=True)
+        _max = x.amax(dim=(-2, -1), keepdim=True)
         x -= _min
-        x /= (_max - _min) / 255.0
-        x.round_()
-        x.clamp_(0.0, 255.0)
-        return x.byte()
+        x /= _max - _min
+        return x
 
 
 class PercentileScale(torch.nn.Module):
@@ -40,14 +34,14 @@ class PercentileScale(torch.nn.Module):
         self.register_buffer("percentiles", torch.tensor([min, max]))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.float()
-        q = x.flatten(start_dim=1).quantile(q=self.get_buffer("percentiles"), dim=1)
+        # x is (N, C, H, W) with range [0.0, 1.0]
+        q = x.flatten(start_dim=2).quantile(q=self.get_buffer("percentiles"), dim=-1, keepdim=True)
+        q.unsqueeze_(-1)
         _min, _max = q[0], q[1]
         x -= _min
-        x /= (_max - _min) / 255.0
-        x.round_()
-        x.clamp_(0.0, 255.0)
-        return x.byte()
+        x /= _max - _min
+        # x.clamp_(0.0, 1.0)
+        return x
 
 
 class CropCenterRight(torch.nn.Module):
@@ -59,37 +53,42 @@ class CropCenterRight(torch.nn.Module):
         return utils.crop_right_center(img=img, size=self.size)
 
 
-class DataframeDataPipe(Dataset):
-    def __init__(self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set) -> None:
+class PNGDataset(Dataset):
+    def __init__(
+        self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set[str], filepath_format: str
+    ) -> None:
         super().__init__()
         self.df = df
         self.augmentation = augmentation
         self.keys = keys
+        self.filepath_format = filepath_format
 
     def __len__(self) -> int:
         return len(self.df)
 
     @staticmethod
-    def _read(filepath: str) -> npt.NDArray[np.uint8]:
+    def _read(filepath: str) -> torch.Tensor:
         arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-        return arr
+        if arr is None:
+            raise RuntimeError(f"No data found at {filepath}")
+        t = torch.from_numpy(arr)
+        t.unsqueeze_(dim=0)
+        return t
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
-        row = self.df.iloc[index]
-        logger.debug(f"Loading image {row['image_id']}")
-        d = row.to_dict()
-        arr = self._read(filepath=row["filepath"])
-        pixels = torch.from_numpy(arr)
-        pixels.unsqueeze_(dim=0)
-        d["pixels"] = self.augmentation(pixels)
-        d = {k: v for k, v in d.items() if k in self.keys}
-        return d
+        row = self.df.iloc[index].to_dict()
+        row.update(
+            {
+                view: self.augmentation(self._read(self.filepath_format.format(image_id=np.random.choice(row[view]))))
+                for view in ["CC", "MLO"]
+            }
+        )
+        return row
 
 
 class DataModule(LightningDataModule):
     def __init__(
         self,
-        metadata_filepath: str,
         image_dir: str,
         augmentation: DictConfig,
         batch_size: int,
@@ -97,12 +96,11 @@ class DataModule(LightningDataModule):
     ) -> None:
         super().__init__()
         self.save_hyperparameters("augmentation", "batch_size")
-        self.metadata_filepath = metadata_filepath
         self.image_dir = image_dir
-        self.augmentation: torch.nn.Sequential = instantiate(self.hparams.augmentation)
+        self.augmentation: torch.nn.Sequential = instantiate(self.hparams_initial["augmentation"])
         self.num_workers = torch.multiprocessing.cpu_count()
+        logger.info(f"Detected {self.num_workers} cores.")
         self.prefetch_factor = prefetch_factor
-        self.filepath_format = os.path.join(self.image_dir, "{image_id}_0.png")
 
     @staticmethod
     def compute_class_weights(y: pd.Series) -> pd.Series:
@@ -113,74 +111,65 @@ class DataModule(LightningDataModule):
 
     def _use_artifact(self) -> None:
         if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
+            logger.info("Saving input artifact reference...")
             artifact = wandb.Artifact(name="input", type="dataset")
-            artifact.add_reference(uri=f"file://{self.metadata_filepath}", name="metadata.csv")
-            artifact.add_reference(uri=f"file://{self.image_dir}", name="image_dir", checksum=False, max_objects=1e9)
+            artifact.add_reference(uri=f"file://{os.path.join(self.image_dir, 'train.pickle')}", name="train.pickle")
+            artifact.add_reference(uri=f"file://{os.path.join(self.image_dir, 'val.pickle')}", name="val.pickle")
+            # artifact.add_reference(
+            #     uri=f"file://{self.image_dir}", name="image_dir", max_objects=len(self.df), checksum=False
+            # )
             self.trainer.logger.use_artifact(artifact, artifact_type="dataset").save()
         else:
             logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 
     def setup(self, stage: str) -> None:
-        self.df = pd.read_csv(self.metadata_filepath)
-        self.df["filepath"] = self.df.apply(self._format_filepath, axis=1)
         if stage == "fit":
-            self.df.query("patient_id != 27770", inplace=True)
-            self.df.query("image_id != 1942326353", inplace=True)
-            class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
-            # class_weights = self.df["cancer"].value_counts(normalize=True)
-            self.df["sample_weight"] = self.df["cancer"].map(class_weights.get)
-            self.cancer_base_rate = self.df["cancer"].mean()
-
-        self._use_artifact()
-
-    def state_dict(self) -> Dict[str, Any]:
-        return {"cancer_base_rate": self.cancer_base_rate}
-
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        self.cancer_base_rate = state_dict["cancer_base_rate"]
+            self.train_meta = pd.read_pickle(os.path.join(self.image_dir, "train.pickle"))
+            self.val_meta = pd.read_pickle(os.path.join(self.image_dir, "val.pickle"))
+            # class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
+            class_weights = {0: 1, 1: 3}
+            self.train_meta["sample_weight"] = self.train_meta["cancer"].map(class_weights.get)
+            self._use_artifact()
+        elif stage == "predict":
+            self.val_meta = pd.read_pickle(os.path.join(self.image_dir, "val.pickle"))
 
     def train_dataloader(self) -> DataLoader:
-        pipe = DataframeDataPipe(
-            self.df, augmentation=self.augmentation.train(), keys={"pixels", "cancer"}
-        )  # .to_iter_datapipe()
+        pipe = PNGDataset(
+            self.train_meta,
+            augmentation=self.augmentation.train(),
+            keys={"cancer"},
+            filepath_format=os.path.join(self.image_dir, "{image_id}_0.png"),
+        )
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams.batch_size,
+            batch_size=self.hparams_initial["batch_size"],
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
             sampler=WeightedRandomSampler(
-                weights=self.df["sample_weight"],
-                num_samples=len(self.df),
+                weights=self.train_meta["sample_weight"],
+                num_samples=len(self.train_meta),
                 replacement=True,
             ),
-            drop_last=True,  # True to avoid retriggering CuDNN benchmarking
+            drop_last=False,
+            persistent_workers=self.num_workers > 0,
         )
-        # pipe = pipe.map(dicom2tensor, input_col="filepath", output_col="pixels")
-        # pipe = pipe.in_memory_cache()
-        # pipe = pipe.shuffle(buffer_size=1)
-        # self.augmentation.train()
-        # pipe = pipe.map(self.augmentation, input_col="pixels", output_col="pixels")
-        # pipe = pipe.map(partial(select_dict_keys, keys=["pixels", "cancer"]))
-        # pipe = pipe.batch(8)
-        # pipe = pipe.collate()
-        # pipe = pipe.prefetch(buffer_size=1)
-        # return DataLoader2(datapipe=pipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=0))
 
     def val_dataloader(self) -> DataLoader:
-        pipe = DataframeDataPipe(
-            self.df,
+        pipe = PNGDataset(
+            self.val_meta,
             augmentation=self.augmentation.eval(),
-            keys={"pixels", "cancer", "image_id", "patient_id", "laterality"},
-        )  # .to_iter_datapipe()
+            keys={"cancer", "patient_id", "laterality"},
+            filepath_format=os.path.join(self.image_dir, "{image_id}_0.png"),
+        )
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams.batch_size,
-            shuffle=False,
+            batch_size=self.hparams_initial["batch_size"] * 4,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
             drop_last=False,
+            persistent_workers=self.num_workers > 0,
         )
 
     def predict_dataloader(self) -> DataLoader:

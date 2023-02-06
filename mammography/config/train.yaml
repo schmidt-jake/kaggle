@@ -10,7 +10,6 @@ trainer:
       save_top_k: 1
       verbose: true
       monitor: &monitor metrics/pf1/val
-      dirpath: ${trainer.default_root_dir}/checkpoints
     - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       refresh_rate: 1
     - _target_: pytorch_lightning.callbacks.EarlyStopping
@@ -20,42 +19,35 @@ trainer:
       patience: 5
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
-  # gradient_clip_val: 1.0
-  # gradient_clip_algorithm: value
-  log_every_n_steps: 1
+  gradient_clip_val: 1e1
+  gradient_clip_algorithm: value
+  log_every_n_steps: 10
   num_sanity_val_steps: 0
   benchmark: true
-  max_epochs: 10
+  max_epochs: 100
   precision: 16
-  default_root_dir: ???
   # accumulate_grad_batches: 1
   logger:
     _target_: mammography.src.ptl_patches.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
     log_model: all
-    save_dir: ${trainer.default_root_dir}
+    save_dir: ???
     settings:
       _target_: wandb.Settings
-      code_dir: /kaggle/working/kaggle
+      code_dir: /mammography/mammography
 datamodule:
   _target_: mammography.src.data.DataModule
-  metadata_filepath: ???
   image_dir: ???
-  batch_size: 20
+  batch_size: 12
   prefetch_factor: 3
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
       - _target_: mammography.src.data.CropCenterRight
-        size: 2048
+        size: 3000
       - _target_: torchvision.transforms.Resize
-        _convert_: object
         size: 512
-      # - _target_: mammography.src.data.MinMaxScale
-      - _target_: mammography.src.data.PercentileScale
-        min: 0.005
-        max: 0.995
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
       #   _convert_: object
@@ -76,10 +68,10 @@ model:
   optimizer_config:
     _convert_: all
     optimizer:
-      _target_: torch.optim.Adam
-      lr: 1e-3
-      # momentum: 0.9
-      weight_decay: 0.0
+      _target_: torch.optim.RMSprop
+      lr: 1e-4
+      momentum: 0.9
+      weight_decay: 1e-3
       _partial_: true
     lr_scheduler:
       scheduler:
@@ -97,6 +89,6 @@ model:
     features.0.0:
       in_channels: 1
 seed_fn:
-  _target_: lightning_lite.utilities.seed.seed_everything
+  _target_: pytorch_lightning.utilities.seed.seed_everything
   seed: 42
   workers: true

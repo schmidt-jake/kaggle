@@ -68,3 +68,31 @@ Dicomsdl results for processing 100 files:
 |       0        |        1        |     4     |   fork  |    35.2   |
 |       0        |        1        |     2     |   fork  |    53.3   |
 |       0        |        2        |     4     |   fork  |    33.9   |
+
+## Modeling ideas
+
+### Feb 5
+
+1. Try [`torchvision.ops.sigmoid_focal_loss`](https://pytorch.org/vision/main/generated/torchvision.ops.sigmoid_focal_loss.html#torchvision.ops.sigmoid_focal_loss)
+1. Don't upsample the positive class quite so hard, make the upsampling ratio a hyperparameter
+1. Use a larger initial crop size, e.g. 4096
+1. Use a larger final resized crop, e.g. 1024
+
+### Feb 6
+
+These three ideas in combo seem to yield promising results:
+
+1. Only train on CC and MLO views, which are by far the most standard.
+    1. In the case that a breast has multiple instances of each view, randomly sample one.
+1. Use a separate feature extractor for each of the views
+1. Combine the predictions for each view (probably using `max`)
+
+Next up:
+
+1. Remove implants from training. This would reduce dataset size by 3% and require a different method for predicting for implants.
+1. Add age as a predictor.
+1. Predict density as an auxiliary task. This could help the model distinguish cancer signal from density signal.
+    1. Furthermore, we could feed the density value (or density prediction, when not training) into the cancer predictor as side input.
+1. If available, use more/all additional instances of each CC/MLO view
+    1. First, explore what these additional views look like
+1. Train on raw data (no VOI LUT)
