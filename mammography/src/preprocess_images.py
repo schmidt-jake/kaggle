@@ -3,6 +3,7 @@ import os
 from argparse import ArgumentParser
 from functools import partial
 from multiprocessing.pool import Pool
+from typing import Tuple
 
 import cv2
 import numpy as np
@@ -17,7 +18,7 @@ from mammography.src.dicomsdl import process_dicom
 logger = logging.getLogger(__name__)
 
 
-def breast_mask(img: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint16]:
+def breast_mask(img: npt.NDArray[np.uint16]) -> Tuple[float, npt.NDArray[np.uint16]]:
     thresh, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_TRIANGLE)
     if thresh > 50.0:
         _, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_BINARY)
@@ -55,7 +56,12 @@ def process_image(filepath: str, output_dir: str) -> None:
 def main(metadata_path: str, input_dir: str, output_dir: str) -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("Beginning job...")
-    meta = pd.read_csv(metadata_path)
+    if metadata_path.endswith(".csv"):
+        meta = pd.read_csv(metadata_path)
+    elif metadata_path.endswith(".pickle"):
+        meta = pd.read_pickle(metadata_path)
+    else:
+        raise ValueError(f"Unrecognized suffix: {metadata_path}")
     filepaths = input_dir + meta["patient_id"].astype(str) + "/" + meta["image_id"].astype(str) + ".dcm"
     logger.info("Preprocessing images...")
     with Pool() as pool, logging_redirect_tqdm():

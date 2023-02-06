@@ -6,12 +6,12 @@
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
-  "enable_gpu": true,
+  "enable_gpu": false,
   "enable_internet": false,
   "keywords": [],
   "dataset_sources": [],
   "kernel_sources": [
-    "jakeschmidt/mammography-train"
+    "code/jakeschmidt/mammography-move"
   ],
   "competition_sources": [
     "competitions/rsna-breast-cancer-detection"
