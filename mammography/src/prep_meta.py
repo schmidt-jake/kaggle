@@ -17,9 +17,10 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     # only select the standard CC and MLO views
     meta = meta[meta["view"].isin(["CC", "MLO"])]
+    columns = meta.columns.drop("view")
     breasts = pd.pivot_table(
         meta,
-        index=["patient_id", "laterality", "cancer", "age", "machine_id", "site_id", "BIRADS", "density", "implant"],
+        index=columns,
         columns="view",
         values="image_id",
         aggfunc=list,
