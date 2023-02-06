@@ -12,12 +12,7 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
     return meta
 
 
-def main() -> None:
-    meta = pd.read_csv("mammography/data/raw/train.csv")
-    meta.query("patient_id != 27770", inplace=True)
-    meta.query("image_id != 1942326353", inplace=True)
-    meta.query("implant == 0", inplace=True)
-    # only select the standard CC and MLO views
+def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     meta = meta[meta["view"].isin(["CC", "MLO"])]
     breasts = pd.pivot_table(
         meta,
@@ -29,8 +24,18 @@ def main() -> None:
     breasts.dropna(inplace=True)
     breasts.reset_index(inplace=True)
     breasts = fix_dtypes(breasts)
-
     print(breasts.info())
+    return breasts
+
+
+def main() -> None:
+    meta = pd.read_csv("mammography/data/raw/train.csv")
+    meta.query("patient_id != 27770", inplace=True)
+    meta.query("image_id != 1942326353", inplace=True)
+    meta.query("implant == 0", inplace=True)
+    # only select the standard CC and MLO views
+    meta = meta[meta["view"].isin(["CC", "MLO"])]
+    breasts = get_breast_metadata(meta)
 
     # hold-out by:
     # - machine_id
