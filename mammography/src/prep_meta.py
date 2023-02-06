@@ -10,17 +10,19 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
             meta[col] = pd.to_numeric(meta[col], downcast="unsigned")
         except (ValueError, TypeError):
             continue
-    meta = meta.astype({"laterality": "category", "density": "category"})
+    for col in ["laterality", "density"]:
+        if col in meta.columns:
+            meta[col] = meta[col].astype("category")
     return meta
 
 
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     # only select the standard CC and MLO views
     meta = meta[meta["view"].isin(["CC", "MLO"])]
-    columns = meta.columns.drop("view")
+    columns = meta.columns.drop(["view", "image_id"])
     breasts = pd.pivot_table(
         meta,
-        index=columns,
+        index=columns.to_list(),
         columns="view",
         values="image_id",
         aggfunc=list,
