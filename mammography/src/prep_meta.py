@@ -1,3 +1,5 @@
+from argparse import ArgumentParser
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
@@ -13,6 +15,7 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
+    # only select the standard CC and MLO views
     meta = meta[meta["view"].isin(["CC", "MLO"])]
     breasts = pd.pivot_table(
         meta,
@@ -28,14 +31,13 @@ def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     return breasts
 
 
-def main() -> None:
-    meta = pd.read_csv("mammography/data/raw/train.csv")
-    meta.query("patient_id != 27770", inplace=True)
-    meta.query("image_id != 1942326353", inplace=True)
-    meta.query("implant == 0", inplace=True)
-    # only select the standard CC and MLO views
-    meta = meta[meta["view"].isin(["CC", "MLO"])]
+def main(input_filepath: str, output_filepath: str) -> None:
+    meta = pd.read_csv(input_filepath)
+    # meta.query("patient_id != 27770", inplace=True)
+    # meta.query("image_id != 1942326353", inplace=True)
+    # meta.query("implant == 0", inplace=True)
     breasts = get_breast_metadata(meta)
+    breasts.to_pickle(output_filepath)
 
     # hold-out by:
     # - machine_id
@@ -45,22 +47,26 @@ def main() -> None:
     # - cancer
     # - site_id
 
-    stratify = breasts.loc[:, ["site_id", "cancer", "density", "age"]]
-    stratify["age"] = pd.cut(stratify["age"], bins=4)
+    # stratify = breasts.loc[:, ["site_id", "cancer", "density", "age"]]
+    # stratify["age"] = pd.cut(stratify["age"], bins=4)
 
-    train_ix, val_ix = train_test_split(breasts.index, test_size=0.2, random_state=42, stratify=stratify)
-    train_breasts = breasts.loc[train_ix]
-    val_breasts = breasts.loc[val_ix]
+    # train_ix, val_ix = train_test_split(breasts.index, test_size=0.2, random_state=42, stratify=stratify)
+    # train_breasts = breasts.loc[train_ix]
+    # val_breasts = breasts.loc[val_ix]
 
-    print(train_breasts.info())
-    print(val_breasts.info())
+    # print(train_breasts.info())
+    # print(val_breasts.info())
 
-    train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
-    val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
+    # train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
+    # val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
 
-    train_breasts.to_pickle("mammography/data/png/train.pickle")
-    val_breasts.to_pickle("mammography/data/png/val.pickle")
+    # train_breasts.to_pickle("mammography/data/png/train.pickle")
+    # val_breasts.to_pickle("mammography/data/png/val.pickle")
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("input_filepath", type=str)
+    parser.add_argument("output_filepath", type=str)
+    args = parser.parse_args()
+    main(**vars(args))
