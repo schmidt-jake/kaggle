@@ -11,7 +11,7 @@
   "keywords": [],
   "dataset_sources": [],
   "kernel_sources": [
-    "code/jakeschmidt/mammography-move"
+    "jakeschmidt/mammography-move"
   ],
   "competition_sources": [
     "competitions/rsna-breast-cancer-detection"
