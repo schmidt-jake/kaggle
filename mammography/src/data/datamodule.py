@@ -83,7 +83,7 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["train"], fns=fns)
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams_initial["batch_size"],
+            batch_size=self.hparams["batch_size"],
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
@@ -114,7 +114,7 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams_initial["batch_size"] * 8,
+            batch_size=self.hparams["batch_size"] * 8,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
@@ -146,7 +146,7 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams_initial["batch_size"] * 4,
+            batch_size=self.hparams["batch_size"] * 4,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,

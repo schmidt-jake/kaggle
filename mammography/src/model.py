@@ -101,7 +101,7 @@ class Model(pl.LightningModule):
         x = torch.randint(
             low=0,
             high=255,
-            size=(self.trainer.datamodule.hparams_initial["batch_size"], 1, 512, 512),
+            size=(self.trainer.datamodule.hparams["batch_size"], 1, 512, 512),
             dtype=torch.uint8,
         )
         self.example_input_array = {"cc": x, "mlo": x}
