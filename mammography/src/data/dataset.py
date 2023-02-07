@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, IterableDataset
+from torchdata.datapipes.map import MapDataPipe
 
 from mammography.src.data import preprocess_images
 
@@ -41,7 +41,7 @@ class DicomDataset(IterableDataset):
             yield from self[i]
 
 
-class PNGDataset(Dataset):
+class PNGDataset(MapDataPipe):
     def __init__(
         self, df: pd.DataFrame, augmentation: torch.nn.Sequential, keys: Set[str], filepath_format: str
     ) -> None:

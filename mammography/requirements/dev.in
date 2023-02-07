@@ -1,4 +1,5 @@
 -r main.in
+-r dicom.in
 
 bandit
 black

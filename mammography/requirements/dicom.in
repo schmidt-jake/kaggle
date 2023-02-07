@@ -1,0 +1,9 @@
+-r main.in
+
+# DICOM deps
+dicomsdl
+# pydicom
+# pylibjpeg
+# pylibjpeg-libjpeg
+
+numexpr
