@@ -13,7 +13,7 @@ from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 from torchvision.transforms import ConvertImageDtype
 
-from mammography.src.data import MinMaxScale
+from mammography.src.data.transforms import MinMaxScale
 from mammography.src.loss import SigmoidFocalLoss
 from mammography.src.metrics import ProbabilisticBinaryF1Score
 
@@ -72,7 +72,7 @@ class Model(pl.LightningModule):
             prefix="metrics/",
             postfix="/val",
         )
-        self.transform = torch.jit.script(torch.nn.Sequential(ConvertImageDtype(dtype=torch.float), MinMaxScale()))
+        self.transform = torch.jit.script(torch.nn.Sequential(ConvertImageDtype(dtype=torch.float)))
 
     def _init_metrics(self) -> None:
         for attr in ["train_metrics", "val_metrics"]:
@@ -110,7 +110,7 @@ class Model(pl.LightningModule):
             # self.loss = torch.nn.BCEWithLogitsLoss()
             self.loss = torch.jit.script(SigmoidFocalLoss())
             self._init_metrics()
-            self.hparams["cancer_base_rate"] = self.trainer.datamodule.train_meta["cancer"].mean()
+            self.hparams["cancer_base_rate"] = self.trainer.datamodule.meta["train"]["cancer"].mean()
 
     def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
         p1: torch.Tensor = self.feature_extractor(self.transform(cc).expand(-1, 3, -1, -1))
@@ -157,15 +157,12 @@ class Model(pl.LightningModule):
         self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int
     ) -> Dict[str, Union[torch.Tensor, List[str]]]:
         logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
-        return {
-            "cancer": logit.sigmoid(),
-            "patient_id": batch["patient_id"],
-            "laterality": batch["laterality"],
-        }
+        return {"cancer": logit.sigmoid(), "prediction_id": batch["prediction_id"]}
 
     def configure_optimizers(self) -> Dict[str, Any]:
+        weight_decay = self.hparams_initial["optimizer_config"]["optimizer"].pop("weight_decay")
         config = instantiate(self.hparams_initial["optimizer_config"])
-        config["optimizer"]: torch.optim.Optimizer = config["optimizer"](params=self.parameters())
+        config["optimizer"]: torch.optim.Optimizer = config["optimizer"](params=self._get_params(weight_decay))
         try:
             config["lr_scheduler"]["scheduler"]: torch.optim.lr_scheduler._LRScheduler = config["lr_scheduler"][
                 "scheduler"
@@ -180,3 +177,24 @@ class Model(pl.LightningModule):
         self, epoch: int, batch_idx: int, optimizer: torch.optim.Optimizer, optimizer_idx: int
     ) -> None:
         optimizer.zero_grad(set_to_none=True)
+
+    def _get_params(self, weight_decay: float):
+        params = dict(self.named_parameters())
+        decay_params = set()
+        no_decay_params = set()
+        for param_name, param in params.items():
+            parent_name, _, child_name = param_name.rpartition(".")
+            if child_name.endswith("weight") and isinstance(
+                self.get_submodule(parent_name), (torch.nn.Linear, torch.nn.modules.conv._ConvNd)
+            ):
+                decay_params.add(param_name)
+            else:
+                no_decay_params.add(param_name)
+
+        assert decay_params.isdisjoint(no_decay_params)
+        assert decay_params.union(no_decay_params) == params.keys()
+
+        return [
+            {"params": [params[p] for p in decay_params], "weight_decay": weight_decay},
+            {"params": [params[p] for p in no_decay_params], "weight_decay": 0.0},
+        ]

@@ -1,4 +1,4 @@
--r main.in
+-r train.in
 -r dicom.in
 
 bandit

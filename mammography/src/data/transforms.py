@@ -1,4 +1,5 @@
 import cv2
+import numpy.typing as npt
 import torch
 
 from mammography.src.data import utils
@@ -43,10 +44,25 @@ class PercentileScale(torch.nn.Module):
         return x
 
 
+class ToTensor(torch.nn.Module):
+    """
+    Very similar to `torchvision.transforms.ToTensor`, except doesn't alter data (dtype or values).
+    Adds a leading channel dimension.
+    """
+
+    def forward(self, x: npt.NDArray) -> torch.Tensor:
+        t = torch.from_numpy(x)
+        if t.ndim == 2:
+            t.unsqueeze_(dim=0)
+        if t.ndim != 3:
+            raise RuntimeError(f"Invalid shape: {t.shape}")
+        return t
+
+
 class CropCenterRight(torch.nn.Module):
     def __init__(self, size: int) -> None:
         super().__init__()
         self.size = size
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        return utils.crop_right_center(img=img.unsqueeze(dim=0), size=self.size)
+        return utils.crop_right_center(img=img, size=self.size)

@@ -1,10 +1,25 @@
-from typing import Tuple
+from typing import Any, Dict, Set, Tuple
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 import torch
 from torchvision.transforms import functional_tensor
+
+
+def get_filepath(meta: Dict[str, Any], template: str) -> str:
+    return template.format(**meta)
+
+
+def select_keys(d: Dict[str, Any], keys: Set[str]) -> Dict[str, Any]:
+    return {k: v for k, v in d.items() if k in keys}
+
+
+def read_png(filepath: str) -> npt.NDArray[np.uint]:
+    arr = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+    if arr is None:
+        raise RuntimeError(f"No data found at {filepath}")
+    return arr
 
 
 def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:

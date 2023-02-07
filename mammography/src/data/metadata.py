@@ -1,7 +1,8 @@
 from argparse import ArgumentParser
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
+
+# from sklearn.model_selection import train_test_split
 
 
 def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
@@ -27,7 +28,6 @@ def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
         values="image_id",
         aggfunc=list,
     )
-    breasts.dropna(inplace=True)
     breasts.reset_index(inplace=True)
     breasts = fix_dtypes(breasts)
     print(breasts.info())

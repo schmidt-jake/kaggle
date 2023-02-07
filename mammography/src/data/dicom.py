@@ -55,15 +55,17 @@ def normalize(arr: npt.NDArray[np.float32], invert: bool) -> npt.NDArray[np.uint
     return arr
 
 
-def process_dicom(filepath: str):
-    ne.set_num_threads(1)
+def process_dicom(filepath: str, raw: bool = False) -> npt.NDArray[np.uint]:
     dcm = dicomsdl.open(filepath)
+    arr: npt.NDArray = dcm.pixelData(storedvalue=True)
+    if raw:
+        return arr
+    ne.set_num_threads(1)
     if dcm.PixelRepresentation != 0:
         raise RuntimeError()
     windows = get_windows(dcm)
     windows = windows[[0], :]
     windows = windows.reshape(-1, 2, 1, 1)
-    arr: npt.NDArray = dcm.pixelData(storedvalue=True)
     arr = np.broadcast_to(arr, shape=(windows.shape[0], *arr.shape))
     fn = getattr(dcm, "VOILUTFunction", "LINEAR")
     fn = (fn or "LINEAR").upper()

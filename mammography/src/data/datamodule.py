@@ -1,6 +1,10 @@
 import logging
 import os
+from functools import partial
+from operator import itemgetter
+from typing import Dict
 
+import numpy as np
 import pandas as pd
 import torch
 import wandb
@@ -9,12 +13,16 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
+from mammography.src.data import utils
+from mammography.src.data.dataset import DataframeDataPipe, map_fn
+
 logger = logging.getLogger(__name__)
 
 
 class DataModule(LightningDataModule):
     def __init__(
         self,
+        metadata_paths: Dict[str, str],
         image_dir: str,
         augmentation: DictConfig,
         batch_size: int,
@@ -23,6 +31,7 @@ class DataModule(LightningDataModule):
         super().__init__()
         self.save_hyperparameters("augmentation", "batch_size")
         self.image_dir = image_dir
+        self.metadata_paths = metadata_paths
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams_initial["augmentation"])
         self.num_workers = torch.multiprocessing.cpu_count()
         logger.info(f"Detected {self.num_workers} cores.")
@@ -39,8 +48,8 @@ class DataModule(LightningDataModule):
         if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
             logger.info("Saving input artifact reference...")
             artifact = wandb.Artifact(name="input", type="dataset")
-            artifact.add_reference(uri=f"file://{os.path.join(self.image_dir, 'train.pickle')}", name="train.pickle")
-            artifact.add_reference(uri=f"file://{os.path.join(self.image_dir, 'val.pickle')}", name="val.pickle")
+            for k, v in self.metadata_paths.items():
+                artifact.add_reference(uri=f"file://{v}", name=k)
             # artifact.add_reference(
             #     uri=f"file://{self.image_dir}", name="image_dir", max_objects=len(self.df), checksum=False
             # )
@@ -49,23 +58,29 @@ class DataModule(LightningDataModule):
             logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 
     def setup(self, stage: str) -> None:
+        self.meta = {k: pd.read_pickle(v) for k, v in self.metadata_paths.items()}
         if stage == "fit":
-            self.train_meta = pd.read_pickle(os.path.join(self.image_dir, "train.pickle"))
-            self.val_meta = pd.read_pickle(os.path.join(self.image_dir, "val.pickle"))
             # class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
-            class_weights = {0: 1.0, 1: 10.0}
-            self.train_meta["sample_weight"] = self.train_meta["cancer"].map(class_weights.get)
+            class_weights = {0: 1.0, 1: 5.0}
+            self.meta["train"]["sample_weight"] = self.meta["train"]["cancer"].map(class_weights.get)
             self._use_artifact()
-        elif stage == "predict":
-            self.val_meta = pd.read_pickle(os.path.join(self.image_dir, "val.pickle"))
 
     def train_dataloader(self) -> DataLoader:
-        pipe = PNGDataset(
-            self.train_meta,
-            augmentation=self.augmentation,
-            keys={"cancer"},
-            filepath_format=os.path.join(self.image_dir, "{image_id}_0.png"),
-        )
+        fns = []
+        for view in ["CC", "MLO"]:
+            fns.extend(
+                [
+                    map_fn(np.random.choice, input_key=view, output_key=view),
+                    map_fn(
+                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
+                        output_key=view,
+                    ),
+                    map_fn(utils.read_png, input_key=view, output_key=view),
+                    map_fn(self.augmentation, input_key=view, output_key=view),
+                ]
+            )
+        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
+        pipe = DataframeDataPipe(df=self.meta["train"], fns=fns)
         return DataLoader(
             dataset=pipe,
             batch_size=self.hparams_initial["batch_size"],
@@ -73,8 +88,8 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
             sampler=WeightedRandomSampler(
-                weights=self.train_meta["sample_weight"],
-                num_samples=len(self.train_meta),
+                weights=self.meta["train"]["sample_weight"],
+                num_samples=len(self.meta["train"]),
                 replacement=True,
             ),
             drop_last=False,
@@ -82,12 +97,21 @@ class DataModule(LightningDataModule):
         )
 
     def val_dataloader(self) -> DataLoader:
-        pipe = PNGDataset(
-            self.val_meta,
-            augmentation=self.augmentation,
-            keys={"cancer", "patient_id", "laterality"},
-            filepath_format=os.path.join(self.image_dir, "{image_id}_0.png"),
-        )
+        fns = []
+        for view in ["CC", "MLO"]:
+            fns.extend(
+                [
+                    map_fn(np.random.choice, input_key=view, output_key=view),
+                    map_fn(
+                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
+                        output_key=view,
+                    ),
+                    map_fn(utils.read_png, input_key=view, output_key=view),
+                    map_fn(self.augmentation, input_key=view, output_key=view),
+                ]
+            )
+        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
+        pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
         return DataLoader(
             dataset=pipe,
             batch_size=self.hparams_initial["batch_size"] * 4,
@@ -99,4 +123,33 @@ class DataModule(LightningDataModule):
         )
 
     def predict_dataloader(self) -> DataLoader:
-        return self.val_dataloader()
+        from mammography.src.data.dicom import process_dicom
+
+        fns = []
+        for view in ["CC", "MLO"]:
+            fns.extend(
+                [
+                    map_fn(np.random.choice, input_key=view, output_key=view),
+                    map_fn(
+                        partial(
+                            utils.get_filepath,
+                            template=os.path.join(self.image_dir, f"{{patient_id}}/{{{view}}}.dcm"),
+                        ),
+                        output_key=view,
+                    ),
+                    map_fn(process_dicom, input_key=view, output_key=view),
+                    map_fn(itemgetter(0), input_key=view, output_key=view),
+                    map_fn(self.augmentation, input_key=view, output_key=view),
+                ]
+            )
+        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id"}))
+        pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
+        return DataLoader(
+            dataset=pipe,
+            batch_size=self.hparams_initial["batch_size"] * 4,
+            pin_memory=True,
+            num_workers=self.num_workers,
+            prefetch_factor=self.prefetch_factor,
+            drop_last=False,
+            persistent_workers=self.num_workers > 0,
+        )

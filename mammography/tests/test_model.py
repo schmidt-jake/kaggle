@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 from typing import Any, Dict
 
-import cv2
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
@@ -10,6 +11,7 @@ from hydra.utils import instantiate
 from pytest import MonkeyPatch
 from tqdm import tqdm
 
+from mammography.src.data.metadata import get_breast_metadata
 from mammography.src.submit import submit
 from mammography.src.train import train
 
@@ -21,7 +23,11 @@ def data_patch(index: int) -> Dict[str, Any]:
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
     monkeypatch.setattr(
-        "cv2.imread", lambda filepath, params: np.random.randint(low=0, high=255, size=(512, 512), dtype=np.uint8)
+        "cv2.imread", lambda filepath, params=None: np.random.randint(low=0, high=255, size=(512, 512), dtype=np.uint8)
+    )
+    monkeypatch.setattr(
+        "mammography.src.data.dicom.process_dicom",
+        lambda filepath, raw=False: np.random.randint(low=0, high=255, size=(1, 512, 512), dtype=np.uint8),
     )
     with initialize(version_base=None, config_path="../config"):
         train_cfg = compose(
@@ -45,15 +51,18 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 
         train(train_cfg)
 
-        ckpt_path = (
-            tmp_path / train_cfg.trainer.logger.project / train_cfg.trainer.logger.id / "checkpoints" / "last.ckpt"
-        )
+        ckpt_path = tmp_path / train_cfg.trainer.logger.project / train_cfg.trainer.logger.id / "checkpoints"
+        ckpt_path /= os.listdir(ckpt_path)[0]
+        meta = pd.read_csv("mammography/data/raw/test.csv")
+        test_meta_path = tmp_path / "meta.pickle"
+        get_breast_metadata(meta).to_pickle(test_meta_path)
         submit_cfg = compose(
             config_name="submit",
             overrides=[
-                f"datamodule.image_dir={train_cfg.datamodule.image_dir}",
-                f"datamodule.checkpoint_path={ckpt_path}",
-                f"model.checkpoint_path={ckpt_path}",
+                "datamodule.image_dir=mammography/data/raw/test_images",
+                f"datamodule.metadata_paths.predict={test_meta_path}",
+                f"datamodule.checkpoint_path='{ckpt_path}'",
+                f"model.checkpoint_path='{ckpt_path}'",
                 "+trainer.limit_predict_batches=1",
                 "datamodule.prefetch_factor=2",
             ],

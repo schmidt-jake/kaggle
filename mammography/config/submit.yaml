@@ -7,9 +7,11 @@ trainer:
       write_interval: epoch
       output_filepath: submission.csv
 datamodule:
-  _target_: mammography.src.data.DataModule.load_from_checkpoint
+  _target_: mammography.src.data.datamodule.DataModule.load_from_checkpoint
   checkpoint_path: ???
   image_dir: ???
+  metadata_paths:
+    predict: ???
   prefetch_factor: 4
 model:
   _target_: mammography.src.model.Model.load_from_checkpoint

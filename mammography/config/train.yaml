@@ -41,14 +41,18 @@ trainer:
       _target_: wandb.Settings
       code_dir: /mammography/mammography
 datamodule:
-  _target_: mammography.src.data.DataModule
+  _target_: mammography.src.data.datamodule.DataModule
   image_dir: ???
+  metadata_paths:
+    train: ${datamodule.image_dir}/train.pickle
+    val: ${datamodule.image_dir}/val.pickle
   batch_size: 6
-  prefetch_factor: 3
+  prefetch_factor: 5
   augmentation:
-    _target_: torchvision.transforms.Compose
-    transforms:
-      - _target_: mammography.src.data.CropCenterRight
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: mammography.src.data.transforms.ToTensor
+      - _target_: mammography.src.data.transforms.CropCenterRight
         size: 3000
       - _target_: torchvision.transforms.Resize
         size: 512
