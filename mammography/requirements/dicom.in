@@ -1,5 +1,3 @@
--r main.in
-
 # DICOM deps
 dicomsdl
 # pydicom

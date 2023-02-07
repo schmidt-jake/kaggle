@@ -1,0 +1,4 @@
+-r dicom.in
+
+git+https://github.com/pytorch/data.git@v0.5.1
+hydra-core

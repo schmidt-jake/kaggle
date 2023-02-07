@@ -7,7 +7,7 @@ opencv-python-headless
 pandas
 pytorch-lightning
 torch
-${TORCHDATA}
+torchdata
 torchmetrics
 torchvision
 wandb
