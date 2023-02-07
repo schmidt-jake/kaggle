@@ -22,15 +22,15 @@ def read_png(filepath: str) -> npt.NDArray[np.uint]:
     return arr
 
 
-def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
+def crop_right_center(img: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
     Takes a crop that is on the right side of the arr, horizontally center.
     If needed, adds padding to the left, top, and bottom.
     """
     w, h = functional_tensor.get_image_size(img)
-    top = (h - size) // 2
-    left = w - size
-    cropped = functional_tensor.crop(img=img, top=top, left=left, height=size, width=size)
+    top = (h - height) // 2
+    left = w - width
+    cropped = functional_tensor.crop(img=img, top=top, left=left, height=height, width=width)
     return cropped
 
 

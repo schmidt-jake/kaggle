@@ -60,9 +60,10 @@ class ToTensor(torch.nn.Module):
 
 
 class CropCenterRight(torch.nn.Module):
-    def __init__(self, size: int) -> None:
+    def __init__(self, height: int, width: int) -> None:
         super().__init__()
-        self.size = size
+        self.height = height
+        self.width = width
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        return utils.crop_right_center(img=img, size=self.size)
+        return utils.crop_right_center(img=img, height=self.height, width=self.width)

@@ -61,10 +61,11 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
             overrides=[
                 "datamodule.image_dir=mammography/data/raw/test_images",
                 f"datamodule.metadata_paths.predict={test_meta_path}",
-                f"datamodule.checkpoint_path='{ckpt_path}'",
-                f"model.checkpoint_path='{ckpt_path}'",
+                f"ckpt_path='{ckpt_path}'",
                 "+trainer.limit_predict_batches=1",
                 "datamodule.prefetch_factor=2",
+                f"trainer.accelerator={'gpu' if torch.cuda.is_available() else 'cpu'}",
+                f"trainer.precision={16 if torch.cuda.is_available() else 32}",
             ],
         )
         submit(submit_cfg)

@@ -13,7 +13,6 @@ from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 from torchvision.transforms import ConvertImageDtype
 
-from mammography.src.data.transforms import MinMaxScale
 from mammography.src.loss import SigmoidFocalLoss
 from mammography.src.metrics import ProbabilisticBinaryF1Score
 
@@ -107,8 +106,8 @@ class Model(pl.LightningModule):
         )
         self.example_input_array = {"cc": x, "mlo": x}
         if stage == "fit":
-            # self.loss = torch.nn.BCEWithLogitsLoss()
-            self.loss = torch.jit.script(SigmoidFocalLoss())
+            self.loss = torch.nn.BCEWithLogitsLoss()
+            # self.loss = torch.jit.script(SigmoidFocalLoss())
             self._init_metrics()
             self.hparams["cancer_base_rate"] = self.trainer.datamodule.meta["train"]["cancer"].mean()
 
@@ -142,15 +141,17 @@ class Model(pl.LightningModule):
         logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
         if self.global_step == 0 and self.global_rank == 0:
             self.log_images(batch)
-        loss, preds = self.loss(input=logit, target=batch["cancer"].float())
-        self.train_metrics(preds=preds, target=batch["cancer"], value=loss)
+        # loss, preds = self.loss(input=logit, target=batch["cancer"].float())
+        loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
+        self.train_metrics(preds=logit.sigmoid(), target=batch["cancer"], value=loss)
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
     def validation_step(self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int) -> None:
         logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
-        loss, preds = self.loss(input=logit, target=batch["cancer"].float())
-        self.val_metrics(preds=preds, target=batch["cancer"], value=loss)
+        # loss, preds = self.loss(input=logit, target=batch["cancer"].float())
+        loss = self.loss(input=logit, target=batch["cancer"].float())
+        self.val_metrics(preds=logit.sigmoid(), target=batch["cancer"], value=loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
     def predict_step(
@@ -193,6 +194,8 @@ class Model(pl.LightningModule):
 
         assert decay_params.isdisjoint(no_decay_params)
         assert decay_params.union(no_decay_params) == params.keys()
+
+        logger.info(f"Applying weight decay to {len(decay_params)/len(params):.2%} of all parameters")
 
         return [
             {"params": [params[p] for p in decay_params], "weight_decay": weight_decay},

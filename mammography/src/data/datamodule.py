@@ -61,7 +61,7 @@ class DataModule(LightningDataModule):
         self.meta = {k: pd.read_pickle(v) for k, v in self.metadata_paths.items()}
         if stage == "fit":
             # class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
-            class_weights = {0: 1.0, 1: 5.0}
+            class_weights = {0: 1.0, 1: 3.0}
             self.meta["train"]["sample_weight"] = self.meta["train"]["cancer"].map(class_weights.get)
             self._use_artifact()
 
@@ -114,7 +114,7 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
         return DataLoader(
             dataset=pipe,
-            batch_size=self.hparams_initial["batch_size"] * 4,
+            batch_size=self.hparams_initial["batch_size"] * 8,
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,

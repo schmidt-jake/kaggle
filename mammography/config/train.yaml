@@ -1,7 +1,7 @@
 trainer:
   _target_: pytorch_lightning.Trainer
   accelerator: ???
-  # auto_scale_batch_size: binsearch
+  auto_scale_batch_size: binsearch
   plugins:
     _target_: pytorch_lightning.plugins.io.AsyncCheckpointIO
     checkpoint_io:
@@ -53,7 +53,8 @@ datamodule:
     _args_:
       - _target_: mammography.src.data.transforms.ToTensor
       - _target_: mammography.src.data.transforms.CropCenterRight
-        size: 3000
+        height: 3000
+        width: 2000
       - _target_: torchvision.transforms.Resize
         size: 512
       # - _target_: mammography.src.data.CLAHE

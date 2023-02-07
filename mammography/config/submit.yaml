@@ -1,22 +1,25 @@
 trainer:
   _target_: pytorch_lightning.Trainer
+  accelerator: ???
+  auto_scale_batch_size: binsearch
+  benchmark: true
+  precision: 16
   callbacks:
-    - _target_: pytorch_lightning.callbacks.TQDMProgressBar
-      refresh_rate: 1
     - _target_: mammography.src.submit.SubmissionWriter
       write_interval: epoch
       output_filepath: submission.csv
 datamodule:
   _target_: mammography.src.data.datamodule.DataModule.load_from_checkpoint
-  checkpoint_path: ???
+  checkpoint_path: ${ckpt_path}
   image_dir: ???
   metadata_paths:
     predict: ???
   prefetch_factor: 4
 model:
   _target_: mammography.src.model.Model.load_from_checkpoint
-  checkpoint_path: ???
+  checkpoint_path: ${ckpt_path}
 seed_fn:
   _target_: pytorch_lightning.utilities.seed.seed_everything
   seed: 42
   workers: true
+ckpt_path: ???

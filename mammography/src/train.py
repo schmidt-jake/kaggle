@@ -25,7 +25,7 @@ def train(cfg: DictConfig) -> None:
     #     log_freq=25,
     #     log_graph=True,
     # )
-    trainer.fit(model=model, datamodule=datamodule)
+    trainer.fit(model=model, datamodule=datamodule, ckpt_path=getattr(cfg, "ckpt_path", None))
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")
         profile_art.add_dir(trainer.profiler.dirpath)
