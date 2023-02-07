@@ -13,7 +13,6 @@ import torch
 
 # from mpl_toolkits.axes_grid1 import ImageGrid
 from torchvision.models.feature_extraction import get_graph_node_names
-from torchvision.transforms import functional_tensor
 
 # from typing import Optional, Tuple
 
@@ -77,18 +76,6 @@ def get_suspected_bit_depth(pixel_value: int) -> int:
 # def scale_to_01(arr: npt.NDArray[np.uint16], dcm: FileDataset) -> npt.NDArray[np.float32]:
 #     arr = arr.astype(np.float32) / (2**dcm.BitsStored - 1)
 #     return arr
-
-
-def crop_right_center(img: torch.Tensor, size: int) -> torch.Tensor:
-    """
-    Takes a crop that is on the right side of the arr, horizontally center.
-    If needed, adds padding to the left, top, and bottom.
-    """
-    w, h = functional_tensor.get_image_size(img)
-    top = (h - size) // 2
-    left = w - size
-    cropped = functional_tensor.crop(img=img, top=top, left=left, height=size, width=size)
-    return cropped
 
 
 # @jit(nopython=True)

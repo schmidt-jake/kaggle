@@ -10,13 +10,8 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
-from torchmetrics.classification import (
-    BinaryAccuracy,
-    BinaryAUROC,
-    BinaryCalibrationError,
-)
+from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 from torchvision.transforms import ConvertImageDtype
-from wandb.data_types import Classes
 
 from mammography.src.data import MinMaxScale
 from mammography.src.loss import SigmoidFocalLoss
@@ -56,13 +51,13 @@ class Model(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.logger: "WandbLogger"
-        self.feature_extractor1: torch.nn.Module = instantiate(self.hparams_initial["feature_extractor"])
-        self.feature_extractor2: torch.nn.Module = instantiate(self.hparams_initial["feature_extractor"])
+        self.feature_extractor: torch.nn.Module = instantiate(self.hparams_initial["feature_extractor"])
         self.train_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
                 "loss": MeanMetric(nan_strategy="error"),
+                "auroc": BinaryAUROC(validate_args=False),
             },
             prefix="metrics/",
             postfix="/train",
@@ -72,8 +67,7 @@ class Model(pl.LightningModule):
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
                 "loss": MeanMetric(nan_strategy="error"),
-                # "auroc": BinaryAUROC(validate_args=True),
-                # "calibration_error": BinaryCalibrationError(validate_args=True),
+                "auroc": BinaryAUROC(validate_args=False),
             },
             prefix="metrics/",
             postfix="/val",
@@ -119,8 +113,8 @@ class Model(pl.LightningModule):
             self.hparams["cancer_base_rate"] = self.trainer.datamodule.train_meta["cancer"].mean()
 
     def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
-        p1: torch.Tensor = self.feature_extractor1(self.transform(cc))
-        p2: torch.Tensor = self.feature_extractor2(self.transform(mlo))
+        p1: torch.Tensor = self.feature_extractor(self.transform(cc).expand(-1, 3, -1, -1))
+        p2: torch.Tensor = self.feature_extractor(self.transform(mlo).expand(-1, 3, -1, -1))
         predictions = torch.cat([p1, p2], dim=1)
         return predictions.max(dim=1).values
 

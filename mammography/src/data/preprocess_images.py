@@ -3,46 +3,25 @@ import os
 from argparse import ArgumentParser
 from functools import partial
 from multiprocessing.pool import Pool
-from typing import Tuple
 
 import cv2
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from mammography.src import utils
-from mammography.src.dicomsdl import process_dicom
+from mammography.src.data import utils
+from mammography.src.data.dicom import process_dicom
 
 logger = logging.getLogger(__name__)
-
-
-def breast_mask(img: npt.NDArray[np.uint16]) -> Tuple[float, npt.NDArray[np.uint16]]:
-    thresh, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_TRIANGLE)
-    if thresh > 50.0:
-        _, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_BINARY)
-    contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
-    max_contour = max(contours, key=cv2.contourArea)
-    return thresh, cv2.drawContours(
-        image=np.zeros_like(img, dtype=np.uint8), contours=[max_contour], contourIdx=0, color=1, thickness=-1
-    )
-
-
-def crop_and_mask(img: npt.NDArray[np.uint8], mask: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-    x, y, w, h = cv2.boundingRect(mask)
-    cropped = img[..., y : y + h, x : x + w]
-    mask = mask[..., y : y + h, x : x + w]
-    return cropped * mask
 
 
 def process_image(filepath: str, output_dir: str) -> None:
     image_id = utils.extract_image_id_from_filepath(filepath)
     windows = process_dicom(filepath)
-    thresh, mask = breast_mask(windows.max(axis=0))
+    thresh, mask = utils.breast_mask(windows.max(axis=0))
     if thresh > 5.0:
         logger.warning(f"Got suspiciously high threshold of {thresh} for {filepath}")
-    cropped = crop_and_mask(windows, mask)
+    cropped = utils.crop_and_mask(windows, mask)
     if cropped.shape[1] < 512 or cropped.shape[2] < 512:
         logger.warning(f"Crop shape {cropped.shape} too small. Image ID: {image_id}")
     for i, window in enumerate(cropped):

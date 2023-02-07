@@ -2,11 +2,15 @@ trainer:
   _target_: pytorch_lightning.Trainer
   accelerator: ???
   # auto_scale_batch_size: binsearch
+  plugins:
+    _target_: pytorch_lightning.plugins.io.AsyncCheckpointIO
+    checkpoint_io:
+      _target_: pytorch_lightning.plugins.io.TorchCheckpointIO
   callbacks:
     - _target_: pytorch_lightning.callbacks.ModelCheckpoint
       mode: &mode max
       every_n_epochs: 1
-      save_last: true
+      save_last: false
       save_top_k: 1
       verbose: true
       monitor: &monitor metrics/pf1/val
@@ -16,22 +20,22 @@ trainer:
       monitor: *monitor
       verbose: true
       mode: *mode
-      patience: 5
+      patience: 10
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
-  log_every_n_steps: 10
+  log_every_n_steps: 20
   num_sanity_val_steps: 0
   benchmark: true
-  max_epochs: 100
+  max_epochs: 50
   precision: 16
   # accumulate_grad_batches: 1
   logger:
     _target_: mammography.src.ptl_patches.WandbLogger
     project: rsna-breast-cancer-detection
     job_type: training
-    log_model: all
+    log_model: true
     save_dir: ???
     settings:
       _target_: wandb.Settings
@@ -39,15 +43,18 @@ trainer:
 datamodule:
   _target_: mammography.src.data.DataModule
   image_dir: ???
-  batch_size: 12
+  batch_size: 6
   prefetch_factor: 3
   augmentation:
-    _target_: torch.nn.Sequential
-    _args_:
+    _target_: torchvision.transforms.Compose
+    transforms:
       - _target_: mammography.src.data.CropCenterRight
         size: 3000
       - _target_: torchvision.transforms.Resize
         size: 512
+      # - _target_: mammography.src.data.CLAHE
+      #   clipLimit: 2.0
+      #   tileGridSize: [32, 32]
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
       #   _convert_: object
@@ -68,26 +75,32 @@ model:
   optimizer_config:
     _convert_: all
     optimizer:
-      _target_: torch.optim.RMSprop
-      lr: 1e-4
-      momentum: 0.9
-      weight_decay: 1e-3
+      _target_: torch.optim.AdamW
+      lr: 2e-5
+      weight_decay: 1e-2
       _partial_: true
     lr_scheduler:
       scheduler:
-        _target_: torch.optim.lr_scheduler.ConstantLR
+        _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
         _partial_: true
-        factor: 1.0
-      interval: step
+        mode: *mode
+        factor: 0.5
+        patience: 5
+        cooldown: 3
+        verbose: true
+      interval: epoch
+      monitor: *monitor
   feature_extractor:
     _target_: mammography.src.model.replace_submodules
     _convert_: all
     module:
-      _target_: torchvision.models.efficientnet_b4
+      _target_: torchvision.models.efficientnet_b6
       drop_rate: 0.0
-      num_classes: 1
-    features.0.0:
-      in_channels: 1
+      weights: IMAGENET1K_V1
+    # features.0.0:
+    #   in_channels: 1
+    classifier.1:
+      out_features: 1
 seed_fn:
   _target_: pytorch_lightning.utilities.seed.seed_everything
   seed: 42
