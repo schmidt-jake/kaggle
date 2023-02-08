@@ -18,7 +18,7 @@ logger = getLogger(__name__)
 
 
 class BatchSizeFinder(Callback):
-    def __init__(self, training: Optional[Dict[str, Any]], inference: Optional[Dict[str, Any]]) -> None:
+    def __init__(self, training: Optional[Dict[str, Any]] = None, inference: Optional[Dict[str, Any]] = None) -> None:
         super().__init__()
         self.training = training
         self.inference = inference
