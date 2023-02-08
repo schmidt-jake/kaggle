@@ -27,10 +27,10 @@ trainer:
         mode: binsearch
         batch_arg_name: train_batch_size
         init_val: ${datamodule.train_batch_size}
-      inference:
-        mode: binsearch
-        batch_arg_name: inference_batch_size
-        init_val: ${datamodule.inference_batch_size}
+      # inference:
+      #   mode: binsearch
+      #   batch_arg_name: inference_batch_size
+      #   init_val: ${datamodule.inference_batch_size}
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
   log_every_n_steps: 20

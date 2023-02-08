@@ -8,6 +8,7 @@ trainer:
       write_interval: epoch
       output_filepath: submission.csv
     - _target_: mammography.src.train.BatchSizeFinder
+      training: null
       inference:
         mode: binsearch
         batch_arg_name: inference_batch_size
