@@ -41,8 +41,8 @@ def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
 
 def main(input_filepath: str, output_filepath: str) -> None:
     meta = pd.read_csv(input_filepath)
-    if "predicton_id" not in meta.columns:
-        meta["prediction_id"] = meta["patient_id"] + "_" + meta["laterality"]
+    if "prediction_id" not in meta.columns:
+        meta["prediction_id"] = meta["patient_id"].astype(str) + "_" + meta["laterality"]
     # meta.query("patient_id != 27770", inplace=True)
     # meta.query("image_id != 1942326353", inplace=True)
     # meta.query("implant == 0", inplace=True)
