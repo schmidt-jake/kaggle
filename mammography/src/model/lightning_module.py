@@ -8,11 +8,11 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from torchmetrics import MeanMetric, MetricCollection
+from torchmetrics import MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 
 from mammography.src.loss import SigmoidFocalLoss
-from mammography.src.metrics import ProbabilisticBinaryF1Score
+from mammography.src.metrics import MeanMetricCollection, ProbabilisticBinaryF1Score
 
 if TYPE_CHECKING:
     from pytorch_lightning.loggers import WandbLogger
@@ -30,7 +30,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
-                "loss": MeanMetric(nan_strategy="error"),
+                "loss": MeanMetricCollection({"cancer", "density"}),
                 "auroc": BinaryAUROC(validate_args=False),
             },
             prefix="metrics/",
@@ -40,7 +40,7 @@ class Model(pl.LightningModule):
             {
                 "pf1": ProbabilisticBinaryF1Score(),
                 "accuracy": BinaryAccuracy(validate_args=False),
-                "loss": MeanMetric(nan_strategy="error"),
+                "loss": MeanMetricCollection({"cancer", "density"}),
                 "auroc": BinaryAUROC(validate_args=False),
             },
             prefix="metrics/",
@@ -134,16 +134,16 @@ class Model(pl.LightningModule):
         loss: torch.Tensor = self.loss(
             input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
         )
-        self.train_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], value=loss)
+        self.train_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], **loss)
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
-        return {"loss": loss}
+        return {"loss": loss["sum"]}
 
     def validation_step(self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int) -> None:
         logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"], age=batch["age"])
         loss: torch.Tensor = self.loss(
             input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
         )
-        self.val_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], value=loss)
+        self.val_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], **loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
     def predict_step(

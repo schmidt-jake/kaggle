@@ -1,5 +1,15 @@
+from typing import Set
+
 import torch
-from torchmetrics import Metric
+from torchmetrics import MeanMetric, Metric, MetricCollection
+
+
+class MeanMetricCollection(MetricCollection):
+    def __init__(self, names: Set[str]) -> None:
+        metrics = {name: MeanMetric(nan_strategy="error") for name in names}
+        for name, metric in metrics.items():
+            metric._filter_kwargs = lambda **kwargs: {"value": v for k, v in kwargs.items() if k == name}
+        super().__init__(metrics)
 
 
 class ProbabilisticBinaryF1Score(Metric):
