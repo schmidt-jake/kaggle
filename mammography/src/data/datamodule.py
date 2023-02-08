@@ -91,6 +91,7 @@ class DataModule(LightningDataModule):
             prefetch_factor=self.prefetch_factor,
             drop_last=False,
             persistent_workers=self.num_workers > 0,
+            shuffle=False,
         )
         return dataloader
 
@@ -124,6 +125,7 @@ class DataModule(LightningDataModule):
             prefetch_factor=self.prefetch_factor,
             drop_last=False,
             persistent_workers=self.num_workers > 0,
+            shuffle=False,
         )
         return dataloader
 

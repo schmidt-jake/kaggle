@@ -19,16 +19,21 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
 
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     # only select the standard CC and MLO views
-    meta = meta[meta["view"].isin(["CC", "MLO"])]
-    columns = meta.columns.drop(["view", "image_id"])
+    views = meta[meta["view"].isin(["CC", "MLO"])]
+    columns = views.columns.drop(["view", "image_id"])
     breasts = pd.pivot_table(
-        meta,
+        views,
         index=columns.to_list(),
         columns="view",
         values="image_id",
         aggfunc=list,
     )
     breasts.reset_index(inplace=True)
+    if breasts.isna().any().any():
+        raise RuntimeError("Got NaNs in metadata!")
+    if set(meta["prediction_id"]) != set(breasts["prediction_id"]):
+        raise RuntimeError("Missing prediction IDs in metadata!")
+    breasts.sort_values("prediction_id", inplace=True)
     breasts = fix_dtypes(breasts)
     print(breasts.info())
     return breasts
@@ -36,6 +41,8 @@ def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
 
 def main(input_filepath: str, output_filepath: str) -> None:
     meta = pd.read_csv(input_filepath)
+    if "predicton_id" not in meta.columns:
+        meta["prediction_id"] = meta["patient_id"] + "_" + meta["laterality"]
     # meta.query("patient_id != 27770", inplace=True)
     # meta.query("image_id != 1942326353", inplace=True)
     # meta.query("implant == 0", inplace=True)

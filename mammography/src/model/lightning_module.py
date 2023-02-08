@@ -8,11 +8,10 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from torchmetrics import MetricCollection
+from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
 
-from mammography.src.loss import SigmoidFocalLoss
-from mammography.src.metrics import MeanMetricCollection, ProbabilisticBinaryF1Score
+from mammography.src.metrics import ProbabilisticBinaryF1Score
 
 if TYPE_CHECKING:
     from pytorch_lightning.loggers import WandbLogger
@@ -26,26 +25,36 @@ class Model(pl.LightningModule):
         self.save_hyperparameters()
         self.logger: "WandbLogger"
         self.net: torch.nn.Module = instantiate(self.hparams_initial["net"])
-        self.train_metrics = MetricCollection(
-            {
-                "pf1": ProbabilisticBinaryF1Score(),
-                "accuracy": BinaryAccuracy(validate_args=False),
-                "loss": MeanMetricCollection({"cancer", "density"}),
-                "auroc": BinaryAUROC(validate_args=False),
-            },
-            prefix="metrics/",
-            postfix="/train",
-        )
-        self.val_metrics = MetricCollection(
-            {
-                "pf1": ProbabilisticBinaryF1Score(),
-                "accuracy": BinaryAccuracy(validate_args=False),
-                "loss": MeanMetricCollection({"cancer", "density"}),
-                "auroc": BinaryAUROC(validate_args=False),
-            },
-            prefix="metrics/",
-            postfix="/val",
-        )
+        for k in {"cancer", "density", "sum"}:
+            setattr(self, f"loss_{k}_train", MeanMetric(nan_strategy="error"))
+            setattr(self, f"loss_{k}_val", MeanMetric(nan_strategy="error"))
+        for k in {"cancer", "density"}:
+            setattr(
+                self,
+                f"metrics_{k}_train",
+                MetricCollection(
+                    {
+                        "pf1": ProbabilisticBinaryF1Score(),
+                        "accuracy": BinaryAccuracy(validate_args=False),
+                        "auroc": BinaryAUROC(validate_args=False),
+                    },
+                    prefix=k + "/",
+                    postfix="/train",
+                ),
+            )
+            setattr(
+                self,
+                f"metrics_{k}_val",
+                MetricCollection(
+                    {
+                        "pf1": ProbabilisticBinaryF1Score(),
+                        "accuracy": BinaryAccuracy(validate_args=False),
+                        "auroc": BinaryAUROC(validate_args=False),
+                    },
+                    prefix=k + "/",
+                    postfix="/val",
+                ),
+            )
 
     def _init_metrics(self) -> None:
         for attr in ["train_metrics", "val_metrics"]:
@@ -87,7 +96,7 @@ class Model(pl.LightningModule):
         }
         if stage == "fit":
             self.loss = instantiate(self.hparams_initial["loss"])
-            self._init_metrics()
+            # self._init_metrics()
             self.cancer_base_rate = self.trainer.datamodule.meta["train"]["cancer"].mean()
             self.age_mean = self.trainer.datamodule.meta["train"]["age"].mean()
             self.age_std = self.trainer.datamodule.meta["train"]["age"].std()
@@ -134,8 +143,14 @@ class Model(pl.LightningModule):
         loss: torch.Tensor = self.loss(
             input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
         )
-        self.train_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], **loss)
-        self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
+        for k, v in loss.items():
+            m = getattr(self, f"loss_{k}_train")
+            m(value=v)
+            self.log(name=f"loss/{k}/train", value=m, on_step=True, on_epoch=False)  # type: ignore[arg-type]
+            if hasattr(self, f"metrics_{k}_train"):
+                m = getattr(self, f"metrics_{k}_train")
+                m(preds=logit["cancer"].sigmoid(), target=batch["cancer"])
+                self.log_dict(m, on_step=True, on_epoch=False)
         return {"loss": loss["sum"]}
 
     def validation_step(self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int) -> None:
@@ -143,8 +158,14 @@ class Model(pl.LightningModule):
         loss: torch.Tensor = self.loss(
             input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
         )
-        self.val_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], **loss)
-        self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
+        for k, v in loss.items():
+            m = getattr(self, f"loss_{k}_val")
+            m(value=v)
+            self.log(name=f"loss/{k}/val", value=m, on_step=False, on_epoch=True)  # type: ignore[arg-type]
+            if hasattr(self, f"metrics_{k}_val"):
+                m = getattr(self, f"metrics_{k}_val")
+                m(preds=logit["cancer"].sigmoid(), target=batch["cancer"])
+                self.log_dict(m, on_step=False, on_epoch=True)
 
     def predict_step(
         self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int
