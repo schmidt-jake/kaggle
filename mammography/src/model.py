@@ -104,12 +104,22 @@ class Model(pl.LightningModule):
             size=(self.trainer.datamodule.hparams["batch_size"], 1, 512, 512),
             dtype=torch.uint8,
         )
-        self.example_input_array = {"cc": x, "mlo": x}
+        self.example_input_array = {
+            "cc": x,
+            "mlo": x,
+            # "age": torch.randint(
+            #     low=30, high=90, size=(self.trainer.datamodule.hparams["batch_size"],), dtype=torch.uint8
+            # ),
+        }
         if stage == "fit":
             self.loss = torch.nn.BCEWithLogitsLoss()
             # self.loss = torch.jit.script(SigmoidFocalLoss())
             self._init_metrics()
             self.hparams["cancer_base_rate"] = self.trainer.datamodule.meta["train"]["cancer"].mean()
+            self.hparams["age_mean"] = self.trainer.datamodule.meta["train"]["age"].mean()
+            self.hparams["age_std"] = self.trainer.datamodule.meta["train"]["age"].std()
+            with torch.no_grad():
+                self(**self.example_input_array)
 
     def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
         p1: torch.Tensor = self.feature_extractor(self.transform(cc).expand(-1, 3, -1, -1))

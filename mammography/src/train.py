@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import hydra
+import torch
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -25,6 +26,8 @@ def train(cfg: DictConfig) -> None:
     #     log_freq=25,
     #     log_graph=True,
     # )
+    if torch.cuda.is_available():
+        trainer.tune(model=model, datamodule=datamodule, method="fit")
     trainer.fit(model=model, datamodule=datamodule, ckpt_path=getattr(cfg, "ckpt_path", None))
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")

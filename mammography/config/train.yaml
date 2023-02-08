@@ -46,7 +46,7 @@ datamodule:
   metadata_paths:
     train: ${datamodule.image_dir}/train.pickle
     val: ${datamodule.image_dir}/val.pickle
-  batch_size: 6
+  batch_size: 5
   prefetch_factor: 5
   augmentation:
     _target_: torch.nn.Sequential
@@ -56,13 +56,13 @@ datamodule:
         height: 3000
         width: 2000
       - _target_: torchvision.transforms.Resize
-        size: 512
+        size: 511
+        max_size: 512
       # - _target_: mammography.src.data.CLAHE
       #   clipLimit: 2.0
       #   tileGridSize: [32, 32]
       # - _target_: torchvision.transforms.RandomHorizontalFlip
       # - _target_: torchvision.transforms.RandomAffine
-      #   _convert_: object
       #   degrees: 40.0
       #   translate:
       #     - 0.2

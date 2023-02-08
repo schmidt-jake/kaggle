@@ -81,7 +81,7 @@ class DataModule(LightningDataModule):
             )
         fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
         pipe = DataframeDataPipe(df=self.meta["train"], fns=fns)
-        return DataLoader(
+        dataloader = DataLoader(
             dataset=pipe,
             batch_size=self.hparams["batch_size"],
             pin_memory=True,
@@ -95,6 +95,8 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
+        logger.info(f"Using training batch size of {dataloader.batch_size}")
+        return dataloader
 
     def val_dataloader(self) -> DataLoader:
         fns = []
@@ -112,7 +114,7 @@ class DataModule(LightningDataModule):
             )
         fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
         pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
-        return DataLoader(
+        dataloader = DataLoader(
             dataset=pipe,
             batch_size=self.hparams["batch_size"] * 8,
             pin_memory=True,
@@ -121,6 +123,8 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
+        logger.info(f"Using validation batch size of {dataloader.batch_size}")
+        return dataloader
 
     def predict_dataloader(self) -> DataLoader:
         from mammography.src.data.dicom import process_dicom
@@ -144,7 +148,7 @@ class DataModule(LightningDataModule):
             )
         fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id"}))
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
-        return DataLoader(
+        dataloader = DataLoader(
             dataset=pipe,
             batch_size=self.hparams["batch_size"] * 4,
             pin_memory=True,
@@ -153,3 +157,5 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
+        logger.info(f"Using predict batch size of {dataloader.batch_size}")
+        return dataloader
