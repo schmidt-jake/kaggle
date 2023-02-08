@@ -25,11 +25,12 @@ class DataModule(LightningDataModule):
         metadata_paths: Dict[str, str],
         image_dir: str,
         augmentation: DictConfig,
-        batch_size: int,
+        train_batch_size: int,
+        inference_batch_size: int,
         prefetch_factor: int,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters("augmentation", "batch_size")
+        self.save_hyperparameters("augmentation", "train_batch_size", "inference_batch_size")
         self.image_dir = image_dir
         self.metadata_paths = metadata_paths
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams_initial["augmentation"])
@@ -83,7 +84,7 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["train"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
-            batch_size=self.hparams["batch_size"],
+            batch_size=self.hparams["train_batch_size"],
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
@@ -95,7 +96,6 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
-        logger.info(f"Using training batch size of {dataloader.batch_size}")
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -116,14 +116,13 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
-            batch_size=self.hparams["batch_size"] * 8,
+            batch_size=self.hparams["inference_batch_size"],
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
-        logger.info(f"Using validation batch size of {dataloader.batch_size}")
         return dataloader
 
     def predict_dataloader(self) -> DataLoader:
@@ -150,12 +149,11 @@ class DataModule(LightningDataModule):
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
-            batch_size=self.hparams["batch_size"] * 4,
+            batch_size=self.hparams["inference_batch_size"],
             pin_memory=True,
             num_workers=self.num_workers,
             prefetch_factor=self.prefetch_factor,
             drop_last=False,
             persistent_workers=self.num_workers > 0,
         )
-        logger.info(f"Using predict batch size of {dataloader.batch_size}")
         return dataloader

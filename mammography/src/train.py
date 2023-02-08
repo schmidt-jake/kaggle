@@ -1,15 +1,43 @@
 import logging
-from typing import TYPE_CHECKING
+from logging import getLogger
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import hydra
-import torch
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.profilers import PyTorchProfiler
+from pytorch_lightning.tuner.batch_size_scaling import scale_batch_size
 
 if TYPE_CHECKING:
     from pytorch_lightning import LightningDataModule, LightningModule, Trainer
+
+
+logger = getLogger(__name__)
+
+
+class BatchSizeFinder(Callback):
+    def __init__(self, training: Optional[Dict[str, Any]], inference: Optional[Dict[str, Any]]) -> None:
+        super().__init__()
+        self.training = training
+        self.inference = inference
+
+    def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+        if self.training:
+            logger.info("Finding training batch size...")
+            scale_batch_size(trainer=trainer, model=pl_module, **self.training)
+
+    def on_validation_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+        if self.inference:
+            logger.info("Finding validation batch size...")
+            if trainer.current_epoch == 0:
+                scale_batch_size(trainer=trainer, model=pl_module, **self.inference)
+
+    def on_predict_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+        if self.inference:
+            logger.info("Finding predict batch size...")
+            self.on_validation_start(trainer, pl_module)
 
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)
@@ -26,8 +54,6 @@ def train(cfg: DictConfig) -> None:
     #     log_freq=25,
     #     log_graph=True,
     # )
-    if torch.cuda.is_available():
-        trainer.tune(model=model, datamodule=datamodule, method="fit")
     trainer.fit(model=model, datamodule=datamodule, ckpt_path=getattr(cfg, "ckpt_path", None))
     if isinstance(trainer.profiler, PyTorchProfiler):
         profile_art = wandb.Artifact("trace", type="profile")

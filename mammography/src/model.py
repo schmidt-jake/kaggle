@@ -11,7 +11,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
-from torchvision.transforms import ConvertImageDtype
+from torchvision.transforms.functional import convert_image_dtype
 
 from mammography.src.loss import SigmoidFocalLoss
 from mammography.src.metrics import ProbabilisticBinaryF1Score
@@ -71,7 +71,6 @@ class Model(pl.LightningModule):
             prefix="metrics/",
             postfix="/val",
         )
-        self.transform = torch.jit.script(torch.nn.Sequential(ConvertImageDtype(dtype=torch.float)))
 
     def _init_metrics(self) -> None:
         for attr in ["train_metrics", "val_metrics"]:
@@ -101,7 +100,7 @@ class Model(pl.LightningModule):
         x = torch.randint(
             low=0,
             high=255,
-            size=(self.trainer.datamodule.hparams["batch_size"], 1, 512, 512),
+            size=(self.trainer.datamodule.hparams["train_batch_size"], 1, 512, 512),
             dtype=torch.uint8,
         )
         self.example_input_array = {
@@ -118,12 +117,13 @@ class Model(pl.LightningModule):
             self.hparams["cancer_base_rate"] = self.trainer.datamodule.meta["train"]["cancer"].mean()
             self.hparams["age_mean"] = self.trainer.datamodule.meta["train"]["age"].mean()
             self.hparams["age_std"] = self.trainer.datamodule.meta["train"]["age"].std()
-            with torch.no_grad():
-                self(**self.example_input_array)
+            # with torch.no_grad():
+            #     self(**self.example_input_array)
 
     def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
-        p1: torch.Tensor = self.feature_extractor(self.transform(cc).expand(-1, 3, -1, -1))
-        p2: torch.Tensor = self.feature_extractor(self.transform(mlo).expand(-1, 3, -1, -1))
+        dtype = torch.half if cc.is_cuda else torch.float
+        p1: torch.Tensor = self.feature_extractor(convert_image_dtype(cc, dtype=dtype).expand(-1, 3, -1, -1))
+        p2: torch.Tensor = self.feature_extractor(convert_image_dtype(mlo, dtype=dtype).expand(-1, 3, -1, -1))
         predictions = torch.cat([p1, p2], dim=1)
         return predictions.max(dim=1).values
 

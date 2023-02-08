@@ -1,7 +1,6 @@
 trainer:
   _target_: pytorch_lightning.Trainer
   accelerator: ???
-  auto_scale_batch_size: binsearch
   plugins:
     _target_: pytorch_lightning.plugins.io.AsyncCheckpointIO
     checkpoint_io:
@@ -23,6 +22,15 @@ trainer:
       patience: 10
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
+    - _target_: mammography.src.train.BatchSizeFinder
+      training:
+        mode: binsearch
+        batch_arg_name: train_batch_size
+        init_val: ${datamodule.train_batch_size}
+      inference:
+        mode: binsearch
+        batch_arg_name: inference_batch_size
+        init_val: ${datamodule.inference_batch_size}
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
   log_every_n_steps: 20
@@ -46,7 +54,8 @@ datamodule:
   metadata_paths:
     train: ${datamodule.image_dir}/train.pickle
     val: ${datamodule.image_dir}/val.pickle
-  batch_size: 5
+  train_batch_size: 10
+  inference_batch_size: 20
   prefetch_factor: 5
   augmentation:
     _target_: torch.nn.Sequential

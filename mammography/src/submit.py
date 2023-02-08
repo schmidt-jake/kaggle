@@ -44,8 +44,6 @@ def submit(cfg: DictConfig) -> None:
     model: pl.LightningModule = instantiate(cfg.model)
     datamodule: pl.LightningDataModule = instantiate(cfg.datamodule)
     trainer: pl.Trainer = instantiate(cfg.trainer)
-    if torch.cuda.is_available():
-        trainer.tune(model=model, datamodule=datamodule, method="predict")
     trainer.predict(model=model, datamodule=datamodule, return_predictions=False, ckpt_path=cfg.ckpt_path)
 
 

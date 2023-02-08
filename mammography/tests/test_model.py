@@ -35,9 +35,10 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
             overrides=[
                 "+trainer.limit_train_batches=1",
                 "+trainer.limit_val_batches=1",
-                "trainer.max_epochs=1",
+                "trainer.max_epochs=2",
                 "datamodule.image_dir=mammography/data/png",
-                "datamodule.batch_size=2",
+                "datamodule.train_batch_size=2",
+                "datamodule.inference_batch_size=2",
                 "datamodule.prefetch_factor=2",
                 "+trainer.detect_anomaly=true",
                 "trainer.benchmark=false",
