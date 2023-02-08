@@ -22,15 +22,17 @@ trainer:
       patience: 10
     - _target_: pytorch_lightning.callbacks.LearningRateMonitor
       log_momentum: true
-    - _target_: mammography.src.train.BatchSizeFinder
-      training:
-        mode: binsearch
-        batch_arg_name: train_batch_size
-        init_val: ${datamodule.train_batch_size}
-      # inference:
-      #   mode: binsearch
-      #   batch_arg_name: inference_batch_size
-      #   init_val: ${datamodule.inference_batch_size}
+    - _target_: pytorch_lightning.callbacks.ModelSummary
+      max_depth: 3
+    # - _target_: mammography.src.train.BatchSizeFinder
+    #   training:
+    #     mode: binsearch
+    #     batch_arg_name: train_batch_size
+    #     init_val: ${datamodule.train_batch_size}
+    # inference:
+    #   mode: binsearch
+    #   batch_arg_name: inference_batch_size
+    #   init_val: ${datamodule.inference_batch_size}
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
   log_every_n_steps: 20
@@ -54,8 +56,8 @@ datamodule:
   metadata_paths:
     train: ${datamodule.image_dir}/train.pickle
     val: ${datamodule.image_dir}/val.pickle
-  train_batch_size: 10
-  inference_batch_size: 20
+  train_batch_size: 9
+  inference_batch_size: 30
   prefetch_factor: 5
   augmentation:
     _target_: torch.nn.Sequential
@@ -85,7 +87,7 @@ datamodule:
       # - _target_: torchvision.transforms.CenterCrop
       #   size: 512
 model:
-  _target_: mammography.src.model.Model
+  _target_: mammography.src.model.lightning_module.Model
   optimizer_config:
     _convert_: all
     optimizer:
@@ -104,17 +106,49 @@ model:
         verbose: true
       interval: epoch
       monitor: *monitor
-  feature_extractor:
-    _target_: mammography.src.model.replace_submodules
-    _convert_: all
-    module:
-      _target_: torchvision.models.efficientnet_b6
-      drop_rate: 0.0
-      weights: IMAGENET1K_V1
-    # features.0.0:
-    #   in_channels: 1
-    classifier.1:
-      out_features: 1
+  loss:
+    _target_: mammography.src.loss.MultiLoss
+    cancer:
+      _target_: torch.nn.BCEWithLogitsLoss
+    density:
+      _target_: torch.nn.BCEWithLogitsLoss
+  net:
+    _target_: mammography.src.model.modules.Network
+    image_fuser:
+      _target_: mammography.src.model.modules.ImageFuser
+      feature_extractor:
+        _target_: builtins.getattr
+        _args_:
+          - _target_: torchvision.models.efficientnet_b6
+            weights: IMAGENET1K_V1
+          - features
+      neck:
+        _target_: torch.nn.Sequential
+        _args_:
+          # - _target_: torch.nn.LazyConv2d
+          #   out_channels: 96
+          #   kernel_size: 3
+          # - _target_: torch.nn.LazyBatchNorm2d
+          # - _target_: torch.nn.ReLU
+          #   inplace: true
+          - _target_: torch.nn.AdaptiveAvgPool2d
+            output_size: 1
+          - _target_: torch.nn.Flatten
+    neck:
+      _target_: torch.nn.Sequential
+      _args_:
+        - _target_: torch.nn.LazyLinear
+          out_features: 1
+    # _target_: mammography.src.model.replace_submodules
+    # _convert_: all
+    # module:
+    #   _target_: torchvision.models.efficientnet_b6
+    #   drop_rate: 0.0
+    #   weights: IMAGENET1K_V1
+    # # features.0.0:
+    # #   in_channels: 1
+    # classifier.1:
+    #   out_features: 1
 seed_fn:
   _target_: pytorch_lightning.utilities.seed.seed_everything
   seed: 42

@@ -1,5 +1,4 @@
 import logging
-from inspect import signature
 from typing import TYPE_CHECKING, Any, Dict, List, Union
 
 import numpy as np
@@ -11,7 +10,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.classification import BinaryAccuracy, BinaryAUROC
-from torchvision.transforms.functional import convert_image_dtype
 
 from mammography.src.loss import SigmoidFocalLoss
 from mammography.src.metrics import ProbabilisticBinaryF1Score
@@ -22,35 +20,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def replace_layer(layer_to_replace: torch.nn.Module, **new_layer_kwargs) -> torch.nn.Module:
-    class_signature = signature(layer_to_replace.__class__).parameters
-    layer_params = {k: getattr(layer_to_replace, k) for k in class_signature.keys() if hasattr(layer_to_replace, k)}
-    layer_params.update(new_layer_kwargs)
-    if "bias" in layer_params.keys() and isinstance(layer_params["bias"], torch.Tensor):
-        layer_params["bias"] = True
-    return type(layer_to_replace)(**layer_params)
-
-
-def replace_submodules(module: torch.nn.Module, **replacement_kwargs: Dict[str, Any]) -> torch.nn.Module:
-    for target, replacement in replacement_kwargs.items():
-        parent_name, _, child_name = target.rpartition(".")
-        parent = module.get_submodule(parent_name)
-        child = parent.get_submodule(child_name)
-        new_child = replace_layer(child, **replacement)
-        setattr(parent, child_name, new_child)
-    return module
-
-
 class Model(pl.LightningModule):
-    def __init__(
-        self,
-        feature_extractor: DictConfig,
-        optimizer_config: DictConfig,
-    ) -> None:
+    def __init__(self, net: DictConfig, optimizer_config: DictConfig, loss: DictConfig) -> None:
         super().__init__()
         self.save_hyperparameters()
         self.logger: "WandbLogger"
-        self.feature_extractor: torch.nn.Module = instantiate(self.hparams_initial["feature_extractor"])
+        self.net: torch.nn.Module = instantiate(self.hparams_initial["net"])
         self.train_metrics = MetricCollection(
             {
                 "pf1": ProbabilisticBinaryF1Score(),
@@ -106,26 +81,31 @@ class Model(pl.LightningModule):
         self.example_input_array = {
             "cc": x,
             "mlo": x,
-            # "age": torch.randint(
-            #     low=30, high=90, size=(self.trainer.datamodule.hparams["batch_size"],), dtype=torch.uint8
-            # ),
+            "age": torch.randint(
+                low=30, high=90, size=(self.trainer.datamodule.hparams["train_batch_size"],), dtype=torch.uint8
+            ),
         }
         if stage == "fit":
-            self.loss = torch.nn.BCEWithLogitsLoss()
-            # self.loss = torch.jit.script(SigmoidFocalLoss())
+            self.loss = instantiate(self.hparams_initial["loss"])
             self._init_metrics()
-            self.hparams["cancer_base_rate"] = self.trainer.datamodule.meta["train"]["cancer"].mean()
-            self.hparams["age_mean"] = self.trainer.datamodule.meta["train"]["age"].mean()
-            self.hparams["age_std"] = self.trainer.datamodule.meta["train"]["age"].std()
-            # with torch.no_grad():
-            #     self(**self.example_input_array)
+            self.cancer_base_rate = self.trainer.datamodule.meta["train"]["cancer"].mean()
+            self.age_mean = self.trainer.datamodule.meta["train"]["age"].mean()
+            self.age_std = self.trainer.datamodule.meta["train"]["age"].std()
+            with torch.no_grad():
+                self(**self.example_input_array)
 
-    def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
-        dtype = torch.half if cc.is_cuda else torch.float
-        p1: torch.Tensor = self.feature_extractor(convert_image_dtype(cc, dtype=dtype).expand(-1, 3, -1, -1))
-        p2: torch.Tensor = self.feature_extractor(convert_image_dtype(mlo, dtype=dtype).expand(-1, 3, -1, -1))
-        predictions = torch.cat([p1, p2], dim=1)
-        return predictions.max(dim=1).values
+    def forward(self, age: torch.Tensor, **imgs: torch.Tensor) -> torch.Tensor:
+        age = age.float()
+        age -= self.age_mean
+        age /= self.age_std
+        return self.net(age=age.unsqueeze(dim=1), **imgs)
+
+    def get_extra_state(self) -> Dict[str, Any]:
+        return {k: getattr(self, k) for k in {"cancer_base_rate", "age_mean", "age_std"}}
+
+    def set_extra_state(self, state: Dict[str, Any]) -> None:
+        for k, v in state.items():
+            setattr(self, k, v)
 
     def log_images(self, batch: Dict[str, torch.Tensor]) -> None:
         cancer = batch["cancer"].detach().cpu().numpy()
@@ -148,27 +128,29 @@ class Model(pl.LightningModule):
         )
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
-        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
+        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"], age=batch["age"])
         if self.global_step == 0 and self.global_rank == 0:
             self.log_images(batch)
-        # loss, preds = self.loss(input=logit, target=batch["cancer"].float())
-        loss: torch.Tensor = self.loss(input=logit, target=batch["cancer"].float())
-        self.train_metrics(preds=logit.sigmoid(), target=batch["cancer"], value=loss)
+        loss: torch.Tensor = self.loss(
+            input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
+        )
+        self.train_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], value=loss)
         self.log_dict(self.train_metrics, on_step=True, on_epoch=False)  # type: ignore[arg-type]
         return {"loss": loss}
 
     def validation_step(self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int) -> None:
-        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
-        # loss, preds = self.loss(input=logit, target=batch["cancer"].float())
-        loss = self.loss(input=logit, target=batch["cancer"].float())
-        self.val_metrics(preds=logit.sigmoid(), target=batch["cancer"], value=loss)
+        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"], age=batch["age"])
+        loss: torch.Tensor = self.loss(
+            input=logit, target={"cancer": batch["cancer"].float(), "density": batch["density"].float()}
+        )
+        self.val_metrics(preds=logit["cancer"].sigmoid(), target=batch["cancer"], value=loss)
         self.log_dict(self.val_metrics, on_step=False, on_epoch=True)  # type: ignore[arg-type]
 
     def predict_step(
         self, batch: Dict[str, Union[torch.Tensor, List[str]]], batch_idx: int
     ) -> Dict[str, Union[torch.Tensor, List[str]]]:
-        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"])
-        return {"cancer": logit.sigmoid(), "prediction_id": batch["prediction_id"]}
+        logit: torch.Tensor = self(cc=batch["CC"], mlo=batch["MLO"], age=batch["age"])
+        return {"cancer": logit["cancer"].sigmoid(), "prediction_id": batch["prediction_id"]}
 
     def configure_optimizers(self) -> Dict[str, Any]:
         weight_decay = self.hparams_initial["optimizer_config"]["optimizer"].pop("weight_decay")

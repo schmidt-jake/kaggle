@@ -35,7 +35,7 @@ class SubmissionWriter(BasePredictionWriter):
                     val = val.cpu().numpy()
                 preds[key].extend(val)
         predictions = pd.DataFrame(preds)
-        predictions.to_csv(self.output_filepath, index=False)
+        predictions[["prediction_id", "cancer"]].to_csv(self.output_filepath, index=False)
 
 
 @hydra.main(config_path="../config", config_name="submit", version_base=None)

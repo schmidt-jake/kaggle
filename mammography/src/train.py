@@ -29,15 +29,17 @@ class BatchSizeFinder(Callback):
             scale_batch_size(trainer=trainer, model=pl_module, **self.training)
 
     def on_validation_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        if self.inference:
+        if trainer.sanity_checking or trainer.state.fn != "validate":
+            return
+
+        if self.inference and trainer.current_epoch == 0:
             logger.info("Finding validation batch size...")
-            if trainer.current_epoch == 0:
-                scale_batch_size(trainer=trainer, model=pl_module, **self.inference)
+            scale_batch_size(trainer=trainer, model=pl_module, **self.inference)
 
     def on_predict_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        if self.inference:
+        if self.inference and trainer.current_epoch == 0:
             logger.info("Finding predict batch size...")
-            self.on_validation_start(trainer, pl_module)
+            scale_batch_size(trainer=trainer, model=pl_module, **self.inference)
 
 
 @hydra.main(config_path="../config", config_name="train", version_base=None)

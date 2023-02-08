@@ -2,7 +2,7 @@ import logging
 import os
 from functools import partial
 from operator import itemgetter
-from typing import Dict
+from typing import Callable, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -42,9 +42,6 @@ class DataModule(LightningDataModule):
     def compute_class_weights(y: pd.Series) -> pd.Series:
         return len(y) / (y.nunique() * y.value_counts())
 
-    def _format_filepath(self, row: pd.Series):
-        return self.filepath_format.format(**row)
-
     def _use_artifact(self) -> None:
         if not (self.trainer.logger.experiment.offline or self.trainer.logger.experiment.disabled):
             logger.info("Saving input artifact reference...")
@@ -67,21 +64,7 @@ class DataModule(LightningDataModule):
             self._use_artifact()
 
     def train_dataloader(self) -> DataLoader:
-        fns = []
-        for view in ["CC", "MLO"]:
-            fns.extend(
-                [
-                    map_fn(np.random.choice, input_key=view, output_key=view),
-                    map_fn(
-                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
-                        output_key=view,
-                    ),
-                    map_fn(utils.read_png, input_key=view, output_key=view),
-                    map_fn(self.augmentation, input_key=view, output_key=view),
-                ]
-            )
-        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
-        pipe = DataframeDataPipe(df=self.meta["train"], fns=fns)
+        pipe = DataframeDataPipe(df=self.meta["train"], fns=self.train_val_fns())
         dataloader = DataLoader(
             dataset=pipe,
             batch_size=self.hparams["train_batch_size"],
@@ -99,21 +82,7 @@ class DataModule(LightningDataModule):
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
-        fns = []
-        for view in ["CC", "MLO"]:
-            fns.extend(
-                [
-                    map_fn(np.random.choice, input_key=view, output_key=view),
-                    map_fn(
-                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
-                        output_key=view,
-                    ),
-                    map_fn(utils.read_png, input_key=view, output_key=view),
-                    map_fn(self.augmentation, input_key=view, output_key=view),
-                ]
-            )
-        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO"}))
-        pipe = DataframeDataPipe(df=self.meta["val"], fns=fns)
+        pipe = DataframeDataPipe(df=self.meta["val"], fns=self.train_val_fns())
         dataloader = DataLoader(
             dataset=pipe,
             batch_size=self.hparams["inference_batch_size"],
@@ -145,7 +114,7 @@ class DataModule(LightningDataModule):
                     map_fn(self.augmentation, input_key=view, output_key=view),
                 ]
             )
-        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id"}))
+        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id", "age"}))
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
@@ -157,3 +126,25 @@ class DataModule(LightningDataModule):
             persistent_workers=self.num_workers > 0,
         )
         return dataloader
+
+    def train_val_fns(self) -> List[Callable]:
+        fns = []
+        for view in ["CC", "MLO"]:
+            fns.extend(
+                [
+                    map_fn(np.random.choice, input_key=view, output_key=view),
+                    map_fn(
+                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
+                        output_key=view,
+                    ),
+                    map_fn(utils.read_png, input_key=view, output_key=view),
+                    map_fn(self.augmentation, input_key=view, output_key=view),
+                ]
+            )
+        fns.extend(
+            [
+                map_fn({"A": 0, "B": 0, "C": 1, "D": 1}.get, input_key="density", output_key="density"),
+                partial(utils.select_keys, keys={"cancer", "CC", "MLO", "age", "density"}),
+            ]
+        )
+        return fns

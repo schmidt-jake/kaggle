@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import Dict, Tuple
 
 import torch
+from torchmetrics import MeanMetric
 
 
 class SigmoidFocalLoss(torch.nn.modules.loss._Loss):
@@ -23,3 +24,19 @@ class SigmoidFocalLoss(torch.nn.modules.loss._Loss):
         # loss = getattr(loss, self.reduction)()
         loss = loss.mean()
         return loss, p
+
+
+class MultiLoss(torch.nn.modules.loss._Loss):
+    def __init__(self, **losses) -> None:
+        super().__init__()
+        self.losses = losses
+        self.metrics = {k: MeanMetric(nan_strategy="error") for k in self.losses.keys()}
+
+    def forward(self, input: Dict[str, torch.Tensor], target: Dict[str, torch.Tensor]) -> torch.Tensor:
+        loss_values = []
+        for name, loss in self.losses.items():
+            loss_value = loss(input=input[name], target=target[name])
+            self.metrics[name](value=loss_value)
+            loss_values.append(loss_value)
+        losses = torch.stack(loss_values)
+        return losses.sum()
