@@ -53,7 +53,7 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     w = arr.shape[-1]
     left, right = arr[..., : w // 2], arr[..., w // 2 :]
     if ne.evaluate("sum(left)") > ne.evaluate("sum(right)"):
-        arr = arr[..., ::-1]
+        arr = arr[..., ::-1].copy()
     return arr
 
 
