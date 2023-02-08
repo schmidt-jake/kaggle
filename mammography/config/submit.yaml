@@ -11,7 +11,7 @@ trainer:
       inference:
         mode: binsearch
         batch_arg_name: inference_batch_size
-        init_val: ${datamodule.inference_batch_size}
+        init_val: 20
 datamodule:
   _target_: mammography.src.data.datamodule.DataModule.load_from_checkpoint
   checkpoint_path: ${ckpt_path}
