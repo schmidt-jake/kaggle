@@ -24,15 +24,15 @@ trainer:
       log_momentum: true
     - _target_: pytorch_lightning.callbacks.ModelSummary
       max_depth: 3
-    # - _target_: mammography.src.train.BatchSizeFinder
-    #   training:
-    #     mode: binsearch
-    #     batch_arg_name: train_batch_size
-    #     init_val: ${datamodule.train_batch_size}
-    # inference:
-    #   mode: binsearch
-    #   batch_arg_name: inference_batch_size
-    #   init_val: ${datamodule.inference_batch_size}
+    - _target_: mammography.src.train.BatchSizeFinder
+      training:
+        mode: binsearch
+        batch_arg_name: train_batch_size
+        init_val: ${datamodule.train_batch_size}
+      inference:
+        mode: binsearch
+        batch_arg_name: inference_batch_size
+        init_val: ${datamodule.inference_batch_size}
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
   log_every_n_steps: 20
@@ -63,9 +63,9 @@ datamodule:
     _target_: torch.nn.Sequential
     _args_:
       - _target_: mammography.src.data.transforms.ToTensor
-      - _target_: mammography.src.data.transforms.CropCenterRight
-        height: 3000
-        width: 2000
+      # - _target_: mammography.src.data.transforms.CropCenterRight
+      #   height: 3000
+      #   width: 2000
       - _target_: torchvision.transforms.Resize
         size: 511
         max_size: 512

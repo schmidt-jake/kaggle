@@ -13,20 +13,23 @@ class ImageFuser(torch.nn.Module):
         super().__init__()
         self.feature_extractor = feature_extractor
         self.neck = neck
+        self.pool = torch.nn.AdaptiveAvgPool2d(output_size=4)
 
-    def forward(self, **imgs: torch.Tensor) -> torch.Tensor:
+    def forward(self, *imgs: torch.Tensor) -> torch.Tensor:
         """
-        Inputs should be tensors with shape = `(N, 1, H, W)` and dtype `uint8`.
+        Inputs should be tensors with shape = `(N, C, H, W)` and dtype `uint`.
         """
-        features = torch.cat(
-            [
+        features = [
+            self.pool(
                 self.feature_extractor(
-                    convert_image_dtype(img, dtype=torch.half if img.is_cuda else torch.float).expand(-1, 3, -1, -1)
+                    convert_image_dtype(img[:, :3, :, :], dtype=torch.half if img.is_cuda else torch.float).expand(
+                        -1, 3, -1, -1
+                    )
                 )
-                for img in imgs.values()
-            ],
-            dim=1,
-        )
+            )
+            for img in imgs
+        ]
+        features = torch.cat(features, dim=1)
         return self.neck(features)
 
 
@@ -38,7 +41,7 @@ class Network(torch.nn.Module):
         self.density_predictor = torch.nn.LazyLinear(out_features=1)
 
     def forward(self, age: torch.Tensor, **imgs: torch.Tensor) -> Dict[str, torch.Tensor]:
-        img_features: torch.Tensor = self.image_fuser(**imgs)
+        img_features: torch.Tensor = self.image_fuser(*imgs.values())
         density_logit: torch.Tensor = self.density_predictor(img_features)
         cancer_logit: torch.Tensor = self.neck(torch.cat([img_features, age, density_logit.sigmoid()], dim=1))
         return {"cancer": cancer_logit.squeeze(dim=1), "density": density_logit.squeeze(dim=1)}

@@ -47,14 +47,17 @@ class PercentileScale(torch.nn.Module):
 class ToTensor(torch.nn.Module):
     """
     Very similar to `torchvision.transforms.ToTensor`, except doesn't alter data (dtype or values).
-    Adds a leading channel dimension.
+    Converts channels-last to channels-first. Adds a leading channel dimension if necessary.
     """
 
     def forward(self, x: npt.NDArray) -> torch.Tensor:
         t = torch.from_numpy(x)
         if t.ndim == 2:
             t.unsqueeze_(dim=0)
-        if t.ndim != 3:
+        elif t.ndim == 3:
+            if t.size(2) <= 4:
+                t = t.permute(2, 0, 1)
+        else:
             raise RuntimeError(f"Invalid shape: {t.shape}")
         return t
 

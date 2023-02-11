@@ -1,11 +1,14 @@
 from enum import Enum
 
+import cv2
 import dicomsdl
 import numexpr as ne
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
 from mammography.src import utils
+from mammography.src.data.utils import convert_bit_depth
 
 
 class VOILUTFunction(int, Enum):
@@ -17,11 +20,11 @@ def get_windows(dcm: dicomsdl.DataSet) -> npt.NDArray[np.uint16]:
     centers, widths = dcm.WindowCenter, dcm.WindowWidth
     if not (isinstance(centers, list) and isinstance(widths, list)):
         centers, widths = [centers], [widths]
-    windows = np.stack([centers, widths], axis=1)
-    _, ix = np.unique(windows, axis=0, return_index=True)
-    ix.sort()
-    windows = windows[ix, :].astype(np.float32)
-    return windows
+    windows = pd.DataFrame({"center": centers, "width": widths})
+    windows.drop_duplicates(inplace=True)
+    windows.sort_values(["center", "width"], inplace=True)
+    windows = windows.astype(np.float32)
+    return windows.values
 
 
 def linear(
@@ -44,27 +47,26 @@ def sigmoid(
     return arr
 
 
-def normalize(arr: npt.NDArray[np.float32], invert: bool) -> npt.NDArray[np.uint8]:
-    pixel_bit_depth = utils.get_suspected_bit_depth(arr.max())
-    ne.evaluate("arr * 255 / (2**pixel_bit_depth - 1)", out=arr)
-    arr = np.rint(arr)
-    arr = arr.astype(np.uint8)
+def normalize(arr: npt.NDArray, invert: bool, output_bit_depth: int) -> npt.NDArray[np.uint]:
+    # input_bit_depth = utils.get_suspected_bit_depth(arr.max())
+    input_bit_depth = 16
+    arr = convert_bit_depth(arr=arr, input_bit_depth=input_bit_depth, output_bit_depth=output_bit_depth)
     if invert:
-        ne.evaluate("255 - arr", out=arr, casting="unsafe")
+        arr = cv2.bitwise_not(arr)
     arr = utils.maybe_flip_left(arr=arr)
     return arr
 
 
-def process_dicom(filepath: str, raw: bool = False) -> npt.NDArray[np.uint]:
+def process_dicom(filepath: str, raw: bool = False, output_bit_depth: int = 8) -> npt.NDArray[np.uint]:
     dcm = dicomsdl.open(filepath)
     arr: npt.NDArray = dcm.pixelData(storedvalue=True)
-    if raw:
-        return arr
     ne.set_num_threads(1)
     if dcm.PixelRepresentation != 0:
         raise RuntimeError()
+    if raw:
+        return normalize(arr, invert=dcm.PhotometricInterpretation == "MONOCHROME1", output_bit_depth=output_bit_depth)
     windows = get_windows(dcm)
-    windows = windows[[0], :]
+    # windows = windows[[0], :]
     windows = windows.reshape(-1, 2, 1, 1)
     arr = np.broadcast_to(arr, shape=(windows.shape[0], *arr.shape))
     fn = getattr(dcm, "VOILUTFunction", "LINEAR")
@@ -75,4 +77,4 @@ def process_dicom(filepath: str, raw: bool = False) -> npt.NDArray[np.uint]:
         arr = linear(arr=arr, center=windows[:, 0], width=windows[:, 1], bits_stored=bits_stored)
     elif fn == VOILUTFunction.SIGMOID:
         arr = sigmoid(arr=arr, center=windows[:, 0], width=windows[:, 1], bits_stored=bits_stored)
-    return normalize(arr, invert=dcm.PhotometricInterpretation == "MONOCHROME1")
+    return normalize(arr, invert=dcm.PhotometricInterpretation == "MONOCHROME1", output_bit_depth=output_bit_depth)

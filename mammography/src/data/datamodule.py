@@ -78,6 +78,7 @@ class DataModule(LightningDataModule):
             ),
             drop_last=False,
             persistent_workers=self.num_workers > 0,
+            collate_fn=utils.collate_fn,
         )
         return dataloader
 
@@ -92,6 +93,7 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
             shuffle=False,
+            collate_fn=utils.collate_fn,
         )
         return dataloader
 
@@ -126,6 +128,7 @@ class DataModule(LightningDataModule):
             drop_last=False,
             persistent_workers=self.num_workers > 0,
             shuffle=False,
+            collate_fn=utils.collate_fn,
         )
         return dataloader
 
@@ -136,7 +139,7 @@ class DataModule(LightningDataModule):
                 [
                     map_fn(np.random.choice, input_key=view, output_key=view),
                     map_fn(
-                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}_0.png")),
+                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}.png")),
                         output_key=view,
                     ),
                     map_fn(utils.read_png, input_key=view, output_key=view),

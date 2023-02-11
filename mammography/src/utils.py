@@ -1,10 +1,6 @@
-import re
 from glob import glob
 from logging import getLogger
 
-# import dicomsdl
-# import matplotlib.pyplot as plt
-import numexpr as ne
 import numpy as np
 import numpy.typing as npt
 
@@ -14,12 +10,14 @@ import torch
 # from mpl_toolkits.axes_grid1 import ImageGrid
 from torchvision.models.feature_extraction import get_graph_node_names
 
+# import dicomsdl
+# import matplotlib.pyplot as plt
+
+
 # from typing import Optional, Tuple
 
 
 logger = getLogger(__name__)
-
-DICOM_FILEPATH = re.compile(r"^[\w\-/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.dcm$")
 
 
 def inspect_module(module: torch.nn.Module) -> None:
@@ -30,13 +28,6 @@ def inspect_module(module: torch.nn.Module) -> None:
             print(node, m)
         except AttributeError:
             print(node)
-
-
-def extract_image_id_from_filepath(filepath: str) -> int:
-    match = re.match(DICOM_FILEPATH, filepath)
-    if match is not None:
-        return int(match.group("image_id"))
-    raise ValueError(f"Not a valid dicom path: {filepath}")
 
 
 def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train_images/*/{image_id}.dcm") -> str:
@@ -50,9 +41,9 @@ def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     Flips `arr` horizontally if the sum of pixels on its left half is greater than its right.
     """
     # Standardize image laterality using pixel values b/c ImageLaterality meta is inaccurate
-    w = arr.shape[-1]
-    left, right = arr[..., : w // 2], arr[..., w // 2 :]
-    if ne.evaluate("sum(left)") > ne.evaluate("sum(right)"):
+    split = arr.shape[-1] // 2
+    left, right = arr[..., :split], arr[..., split:]
+    if left.sum() > right.sum():
         arr = arr[..., ::-1].copy()
     return arr
 

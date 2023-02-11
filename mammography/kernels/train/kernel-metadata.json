@@ -10,7 +10,7 @@
   "enable_internet": true,
   "keywords": [],
   "dataset_sources": [
-    "jakeschmidt/mammography-uint8-crops"
+    "jakeschmidt/mammography-512-composite"
   ],
   "kernel_sources": [],
   "competition_sources": [

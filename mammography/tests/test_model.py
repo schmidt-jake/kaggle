@@ -22,9 +22,9 @@ def data_patch(index: int) -> Dict[str, Any]:
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
-    monkeypatch.setattr(
-        "cv2.imread", lambda filepath, params=None: np.random.randint(low=0, high=255, size=(512, 512), dtype=np.uint8)
-    )
+    # monkeypatch.setattr(
+    #     "cv2.imread", lambda filepath, params=None: np.random.randint(low=0, high=255, size=(512, 512), dtype=np.uint8)
+    # )
     monkeypatch.setattr(
         "mammography.src.data.dicom.process_dicom",
         lambda filepath, raw=False: np.random.randint(low=0, high=255, size=(1, 512, 512), dtype=np.uint8),
@@ -36,7 +36,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "+trainer.limit_train_batches=1",
                 "+trainer.limit_val_batches=1",
                 "trainer.max_epochs=2",
-                "datamodule.image_dir=mammography/data/png",
+                "datamodule.image_dir=mammography/data/resized",
                 "datamodule.train_batch_size=2",
                 "datamodule.inference_batch_size=2",
                 "datamodule.prefetch_factor=2",
