@@ -56,7 +56,7 @@ class DataModule(LightningDataModule):
             logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 
     def setup(self, stage: str) -> None:
-        self.meta = {k: pd.read_pickle(v) for k, v in self.metadata_paths.items()}
+        self.meta = {k: pd.read_json(v) for k, v in self.metadata_paths.items()}
         if stage == "fit":
             # class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
             class_weights = {0: 1.0, 1: 3.0}

@@ -15,7 +15,7 @@ DICOM_FILEPATH = re.compile(r"^[\w\-/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.d
 def resize(img: npt.NDArray[np.uint], max_size: int) -> npt.NDArray[np.uint]:
     height, width = img.shape[0], img.shape[1]
     f = max_size / min(height, width)  # resizing factor
-    dim = (int(width * f), int(height * f))
+    dim = (round(width * f), round(height * f))
     resized = cv2.resize(src=img, dsize=dim)
     return resized
 

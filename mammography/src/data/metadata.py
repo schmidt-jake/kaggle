@@ -71,8 +71,11 @@ def main(input_filepath: str, output_filepath: str) -> None:
     # train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
     # val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
 
-    train_breasts.to_pickle(os.path.join(output_filepath, "train.pickle"))
-    val_breasts.to_pickle(os.path.join(output_filepath, "val.pickle"))
+    # Must use protocol < 5 to be compatible with python 3.7
+    # train_breasts.to_pickle(os.path.join(output_filepath, "train.pickle"), protocol=4)
+    # val_breasts.to_pickle(os.path.join(output_filepath, "val.pickle"), protocol=4)
+    train_breasts.to_json(os.path.join(output_filepath, "train.json"))
+    val_breasts.to_json(os.path.join(output_filepath, "val.json"))
 
 
 if __name__ == "__main__":
