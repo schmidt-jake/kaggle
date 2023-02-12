@@ -48,6 +48,7 @@ class ToTensor(torch.nn.Module):
     """
     Very similar to `torchvision.transforms.ToTensor`, except doesn't alter data (dtype or values).
     Converts channels-last to channels-first. Adds a leading channel dimension if necessary.
+    Also expands to 3 channels.
     """
 
     def forward(self, x: npt.NDArray) -> torch.Tensor:
@@ -59,7 +60,7 @@ class ToTensor(torch.nn.Module):
                 t = t.permute(2, 0, 1)
         else:
             raise RuntimeError(f"Invalid shape: {t.shape}")
-        return t
+        return t.expand(3, -1, -1)
 
 
 class CropCenterRight(torch.nn.Module):
