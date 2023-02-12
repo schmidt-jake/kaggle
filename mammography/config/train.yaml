@@ -29,10 +29,12 @@ trainer:
         mode: binsearch
         batch_arg_name: train_batch_size
         init_val: ${datamodule.train_batch_size}
+        steps_per_trial: 10
       inference:
         mode: binsearch
         batch_arg_name: inference_batch_size
         init_val: ${datamodule.inference_batch_size}
+        steps_per_trial: 10
   gradient_clip_val: 1e1
   gradient_clip_algorithm: value
   log_every_n_steps: 20
@@ -54,8 +56,8 @@ datamodule:
   _target_: mammography.src.data.datamodule.DataModule
   image_dir: ???
   metadata_paths:
-    train: ${datamodule.image_dir}/train.pickle
-    val: ${datamodule.image_dir}/val.pickle
+    train: ${datamodule.image_dir}/train.csv
+    val: ${datamodule.image_dir}/val.csv
   train_batch_size: 9
   inference_batch_size: 30
   prefetch_factor: 5
