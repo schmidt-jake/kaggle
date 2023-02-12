@@ -60,7 +60,7 @@ class ToTensor(torch.nn.Module):
                 t = t.permute(2, 0, 1)
         else:
             raise RuntimeError(f"Invalid shape: {t.shape}")
-        return t.expand(3, -1, -1)
+        return t[:3, ...].expand(3, -1, -1)
 
 
 class CropCenterRight(torch.nn.Module):
