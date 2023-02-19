@@ -14,7 +14,8 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from mammography.src.data import utils
-from mammography.src.data.dataset import DataframeDataPipe, map_fn
+from mammography.src.data.dataset import DataframeDataPipe
+from mammography.src.data.transforms import CropCenterRight, ResizeLookup
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +29,19 @@ class DataModule(LightningDataModule):
         train_batch_size: int,
         inference_batch_size: int,
         prefetch_factor: int,
+        resizer: DictConfig,
+        cropper: DictConfig,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters("augmentation", "train_batch_size", "inference_batch_size")
+        self.save_hyperparameters("augmentation", "train_batch_size", "inference_batch_size", "resizer", "cropper")
         self.image_dir = image_dir
         self.metadata_paths = metadata_paths
         self.augmentation: torch.nn.Sequential = instantiate(self.hparams_initial["augmentation"])
         self.num_workers = torch.multiprocessing.cpu_count()
         logger.info(f"Detected {self.num_workers} cores.")
         self.prefetch_factor = prefetch_factor
+        self.resizer: ResizeLookup = instantiate(self.hparams_initial["resizer"])
+        self.cropper: CropCenterRight = instantiate(self.hparams_initial["cropper"])
 
     @staticmethod
     def compute_class_weights(y: pd.Series) -> pd.Series:
@@ -104,20 +109,23 @@ class DataModule(LightningDataModule):
         for view in ["CC", "MLO"]:
             fns.extend(
                 [
-                    map_fn(np.random.choice, input_key=view, output_key=view),
-                    map_fn(
+                    (np.random.choice, view, view),
+                    (
                         partial(
                             utils.get_filepath,
                             template=os.path.join(self.image_dir, f"{{patient_id}}/{{{view}}}.dcm"),
                         ),
-                        output_key=view,
+                        None,
+                        view,
                     ),
-                    map_fn(process_dicom, input_key=view, output_key=view),
-                    map_fn(itemgetter(0), input_key=view, output_key=view),
-                    map_fn(self.augmentation, input_key=view, output_key=view),
+                    (process_dicom, view, view),
+                    # (itemgetter(0), view, view),
+                    (self.augmentation, view, view),
+                    (partial(self.resizer.resize, key=view), None, view),
+                    (self.cropper, view, view),
                 ]
             )
-        fns.append(partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id", "age"}))
+        fns.append((partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id", "age"}), None, None))
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
@@ -134,22 +142,23 @@ class DataModule(LightningDataModule):
 
     def train_val_fns(self) -> List[Callable]:
         fns = []
+
         for view in ["CC", "MLO"]:
             fns.extend(
                 [
-                    map_fn(np.random.choice, input_key=view, output_key=view),
-                    map_fn(
-                        partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}.png")),
-                        output_key=view,
-                    ),
-                    map_fn(utils.read_png, input_key=view, output_key=view),
-                    map_fn(self.augmentation, input_key=view, output_key=view),
+                    (np.random.choice, view, view),
+                    (partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}.png")), None, view),
+                    (utils.read_png, view, view),
+                    (self.augmentation, view, view),
+                    (partial(self.resizer.resize, key=view), None, view),
+                    (self.cropper, view, view),
                 ]
             )
         fns.extend(
             [
-                map_fn({"A": 0, "B": 0, "C": 1, "D": 1}.get, input_key="density", output_key="density"),
-                partial(utils.select_keys, keys={"cancer", "CC", "MLO", "age", "density"}),
+                # map_fn({"A": 0, "B": 0, "C": 1, "D": 1}.get, input_key="density", output_key="density"),
+                # partial(utils.select_keys, keys={"cancer", "CC", "MLO", "age", "density"}),
+                (partial(utils.select_keys, keys={"cancer", "CC", "MLO"}), None, None)
             ]
         )
         return fns

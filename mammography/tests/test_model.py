@@ -22,12 +22,23 @@ def data_patch(index: int) -> Dict[str, Any]:
 
 def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("torch.multiprocessing.cpu_count", lambda: 0)
-    # monkeypatch.setattr(
-    #     "cv2.imread", lambda filepath, params=None: np.random.randint(low=0, high=255, size=(512, 512), dtype=np.uint8)
-    # )
+    monkeypatch.setattr(
+        "cv2.imread",
+        lambda filepath, params=None: np.random.randint(
+            low=0,
+            high=255,
+            size=np.random.randint(low=128, high=2046, size=2),
+            dtype=np.uint8,
+        ),
+    )
     monkeypatch.setattr(
         "mammography.src.data.dicom.process_dicom",
-        lambda filepath, raw=False: np.random.randint(low=0, high=255, size=(1, 512, 512), dtype=np.uint8),
+        lambda filepath, raw=False: np.random.randint(
+            low=0,
+            high=255,
+            size=np.random.randint(low=128, high=2046, size=2),
+            dtype=np.uint8,
+        ),
     )
     with initialize(version_base=None, config_path="../config"):
         train_cfg = compose(
@@ -36,7 +47,7 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
                 "+trainer.limit_train_batches=1",
                 "+trainer.limit_val_batches=1",
                 "trainer.max_epochs=2",
-                "datamodule.image_dir=mammography/data/resized",
+                "datamodule.image_dir=mammography/data/resized2",
                 "datamodule.train_batch_size=2",
                 "datamodule.inference_batch_size=2",
                 "datamodule.prefetch_factor=2",
@@ -55,8 +66,8 @@ def test_model_train(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
         ckpt_path = tmp_path / train_cfg.trainer.logger.project / train_cfg.trainer.logger.id / "checkpoints"
         ckpt_path /= os.listdir(ckpt_path)[0]
         meta = pd.read_csv("mammography/data/raw/test.csv")
-        test_meta_path = tmp_path / "meta.pickle"
-        get_breast_metadata(meta).to_pickle(test_meta_path)
+        test_meta_path = tmp_path / "meta.json"
+        get_breast_metadata(meta).to_json(test_meta_path)
         submit_cfg = compose(
             config_name="submit",
             overrides=[

@@ -1,3 +1,4 @@
+import json
 import os
 from argparse import ArgumentParser
 
@@ -19,36 +20,33 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
 
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     # only select the standard CC and MLO views
-    views = meta[meta["view"].isin(["CC", "MLO"])]
-    columns = views.columns.drop(["view", "image_id"])
+    views = meta.loc[meta["view"].isin(["CC", "MLO"]), :]
     breasts = pd.pivot_table(
-        views,
-        index=columns.to_list(),
-        columns="view",
-        values="image_id",
-        aggfunc=list,
+        views, index=["prediction_id", "machine_id"], columns="view", values="image_id", aggfunc=list
+    ).reset_index()
+    breasts = breasts.merge(
+        views.drop(["image_id", "view"], axis=1).drop_duplicates(["prediction_id", "machine_id"]),
+        on=["prediction_id", "machine_id"],
+        validate="1:1",
+        how="left",
     )
-    breasts.dropna(inplace=True)
-    breasts.reset_index(inplace=True)
-    if breasts.isna().any().any():
-        raise RuntimeError("Got NaNs in metadata!")
-    # if set(meta["prediction_id"]) != set(breasts["prediction_id"]):
-    #     raise RuntimeError("Missing prediction IDs in metadata!")
+    breasts.dropna(subset=["CC", "MLO"], inplace=True, how="any")
+    breasts.drop_duplicates("prediction_id", inplace=True)
+    # if set(views["prediction_id"]) != set(breasts["prediction_id"]):
+    #     raise ValueError("Missing prediction IDs!")
     breasts.sort_values("prediction_id", inplace=True)
     breasts = fix_dtypes(breasts)
-    print(breasts.info())
     return breasts
 
 
 def main(input_filepath: str, output_filepath: str) -> None:
     meta = pd.read_csv(input_filepath)
+    meta.dropna(subset="age", inplace=True)
     if "prediction_id" not in meta.columns:
         meta["prediction_id"] = meta["patient_id"].astype(str) + "_" + meta["laterality"]
-    meta.query("patient_id != 27770", inplace=True)
-    meta.query("image_id != 1942326353", inplace=True)
     meta.query("implant == 0", inplace=True)
+    meta = meta.loc[~meta["image_id"].isin(list(json.load(open("bad_images.json")).values()))]
     breasts = get_breast_metadata(meta)
-    # breasts.to_pickle(output_filepath)
 
     # hold-out by:
     # - machine_id
@@ -58,22 +56,16 @@ def main(input_filepath: str, output_filepath: str) -> None:
     # - cancer
     # - site_id
 
-    stratify = breasts.loc[:, ["site_id", "cancer", "density", "age"]]
-    stratify["age"] = pd.cut(stratify["age"], bins=4)
+    stratify = breasts.loc[:, ["site_id", "cancer", "age"]]
+    stratify["age"] = pd.cut(stratify["age"], bins=3)
 
     train_ix, val_ix = train_test_split(breasts.index, test_size=0.2, random_state=42, stratify=stratify)
     train_breasts = breasts.loc[train_ix]
     val_breasts = breasts.loc[val_ix]
 
-    print(train_breasts.info())
-    print(val_breasts.info())
-
     # train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
     # val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
 
-    # Must use protocol < 5 to be compatible with python 3.7
-    # train_breasts.to_pickle(os.path.join(output_filepath, "train.pickle"), protocol=4)
-    # val_breasts.to_pickle(os.path.join(output_filepath, "val.pickle"), protocol=4)
     train_breasts.to_json(os.path.join(output_filepath, "train.json"))
     val_breasts.to_json(os.path.join(output_filepath, "val.json"))
 
@@ -83,4 +75,5 @@ if __name__ == "__main__":
     parser.add_argument("input_filepath", type=str)
     parser.add_argument("output_filepath", type=str)
     args = parser.parse_args()
+    os.makedirs(args.output_filepath, exist_ok=True)
     main(**vars(args))

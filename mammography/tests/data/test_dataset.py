@@ -19,15 +19,15 @@ def test_dataset_dicom() -> None:
     for view in ["CC", "MLO"]:
         fns.extend(
             [
-                map_fn(np.random.choice, input_key=view, output_key=view),
+                map_fn(np.random.choice, input_col=view, output_col=view),
                 map_fn(
                     partial(
                         utils.get_filepath, template=f"mammography/data/raw/test_images/{{patient_id}}/{{{view}}}.dcm"
                     ),
-                    output_key=view,
+                    output_col=view,
                 ),
-                map_fn(process_dicom, input_key=view, output_key=view),
-                map_fn(itemgetter(0), input_key=view, output_key=view),
+                map_fn(process_dicom, input_col=view, output_col=view),
+                map_fn(itemgetter(0), input_col=view, output_col=view),
             ]
         )
 

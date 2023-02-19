@@ -18,6 +18,8 @@ datamodule:
   metadata_paths:
     predict: ???
   prefetch_factor: 4
+  resizer:
+    default: 0.4109899928788986
 model:
   _target_: mammography.src.model.lightning_module.Model.load_from_checkpoint
   checkpoint_path: ${ckpt_path}

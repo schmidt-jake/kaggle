@@ -8,13 +8,21 @@ workerPoolSpecs:
   replicaCount: 1
   containerSpec:
     imageUri: us-central1-docker.pkg.dev/rnsa-breast-cancer-detection/containers/mammography:0.1
-    # command:
-    #   - python
-    #   - -m
-    #   - mammography.src.preprocess_images
+    # command: [python, -m, mammography.src.data.inspect_shapes]
+    # args:
+    #   - /gcs/rnsa-kaggle/data/*.png
+    #   - /gcs/rnsa-kaggle/data/shapes.csv
+
+    # command: [python, -m, mammography.src.data.preprocess_images]
+    # args:
+    #   - /gcs/kds-93187e560c991ac18dcbcb5b4e86d922f1b4d72992dc07be698e602b/train_images
+    #   - /gcs/rnsa-kaggle/data/val.json
+    #   - /gcs/rnsa-kaggle/data
+
+    command: [python, -m, mammography.src.train]
     args:
       - trainer.logger.save_dir=/gcs/rnsa-kaggle/runs
-      - datamodule.image_dir=/gcs/rnsa-kaggle/data/png
+      - datamodule.image_dir=/gcs/rnsa-kaggle/data
       - +trainer.accelerator=gpu
       # - +trainer.limit_train_batches=10
       # - +trainer.limit_val_batches=10

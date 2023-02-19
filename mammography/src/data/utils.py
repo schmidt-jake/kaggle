@@ -1,13 +1,15 @@
 import re
-from typing import Any, Dict, List, Set, Tuple
+from logging import getLogger
+from typing import Any, Dict, List, Set
 
 import cv2
-import numexpr as ne
 import numpy as np
 import numpy.typing as npt
 import torch
 from torch.utils.data import default_collate
 from torchvision.transforms import functional_tensor
+
+logger = getLogger(__name__)
 
 DICOM_FILEPATH = re.compile(r"^[\w\-/]+/(?P<patient_id>\d+)/(?P<image_id>\d+)\.dcm$")
 
@@ -21,9 +23,12 @@ def resize(img: npt.NDArray[np.uint], max_size: int) -> npt.NDArray[np.uint]:
 
 
 def convert_bit_depth(arr: npt.NDArray[np.uint], input_bit_depth: int, output_bit_depth: int) -> npt.NDArray[np.uint]:
+    if input_bit_depth == output_bit_depth:
+        return arr
     if np.issubdtype(arr.dtype, np.integer):
         arr = arr.astype(np.float32)
-    ne.evaluate("arr * (2 ** output_bit_depth - 1) / (2**input_bit_depth - 1)", out=arr)
+    # ne.evaluate("arr * (2 ** output_bit_depth - 1) / (2**input_bit_depth - 1)", out=arr)
+    arr *= (2**output_bit_depth - 1) / (2**input_bit_depth - 1)
     arr = np.rint(arr)
     arr = arr.astype(getattr(np, f"uint{output_bit_depth}"))
     return arr
@@ -51,46 +56,71 @@ def read_png(filepath: str) -> npt.NDArray[np.uint]:
     return arr
 
 
-def crop_right_center(img: torch.Tensor, height: int, width: int) -> torch.Tensor:
+def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
     """
-    Takes a crop that is on the right side of the arr, horizontally center.
-    If needed, adds padding to the left, top, and bottom.
+    Flips `arr` horizontally if the sum of pixels on its left half is greater than its right.
     """
-    w, h = functional_tensor.get_image_size(img)
-    top = (h - height) // 2
-    left = w - width
-    cropped = functional_tensor.crop(img=img, top=top, left=left, height=height, width=width)
-    return cropped
+    # Standardize image laterality using pixel values b/c ImageLaterality meta is inaccurate
+    split = arr.shape[-1] // 2
+    left, right = arr[..., :split], arr[..., split:]
+    if left.sum() > right.sum():
+        arr = arr[..., ::-1].copy()
+    return arr
 
 
-def breast_mask(img: npt.NDArray[np.uint]) -> Tuple[float, npt.NDArray[np.uint8]]:
+def extract_largest_object_mask(mask: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    """
+    Extracts the largest object from `mask` and closes any holes in it.
+    """
+    contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE)[0]
+    max_contour = max(contours, key=cv2.contourArea)
+    # perimeter = cv2.arcLength(max_contour, closed=True)
+    # max_contour = cv2.approxPolyDP(max_contour, epsilon=0.01 * perimeter, closed=True)
+    return cv2.drawContours(image=np.zeros_like(mask), contours=[max_contour], contourIdx=0, color=1, thickness=-1)
+
+
+def mask_pct_foreground(mask: npt.NDArray) -> float:
+    x, y, w, h = cv2.boundingRect(mask)
+    mask = mask[y : y + h, x : x + w]
+    return mask.mean()
+
+
+def get_length_scale(mask):
+    x, y, w, h = cv2.boundingRect(mask)
+    area = w * h
+    length_scale = np.sqrt(area)
+    return length_scale
+
+
+def breast_mask(img: npt.NDArray[np.uint]) -> npt.NDArray[np.uint8]:
     max_thresh = 50.0
     # if img.dtype is np.uint16:
     #     max_thresh *= (2**16 - 1) / (2**8 - 1)
-    thresh, mask = cv2.threshold(
-        convert_bit_depth(img, input_bit_depth=16, output_bit_depth=8), thresh=5, maxval=1, type=cv2.THRESH_TRIANGLE
-    )
+    thresh, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_TRIANGLE)
     if thresh > max_thresh:
-        _, mask = cv2.threshold(
-            convert_bit_depth(img, input_bit_depth=16, output_bit_depth=8), thresh=5, maxval=1, type=cv2.THRESH_BINARY
-        )
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (32, 32))
-    mask = cv2.morphologyEx(mask, op=cv2.MORPH_CLOSE, kernel=kernel, iterations=3)
-    contours = cv2.findContours(mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)[0]
-    max_contour = max(contours, key=cv2.contourArea)
-    return thresh, cv2.drawContours(
-        image=np.zeros_like(img, dtype=np.uint8), contours=[max_contour], contourIdx=0, color=1, thickness=-1
-    )
+        logger.warning(f"Got suspiciously high threshold of {thresh}, using 5.0 instead...")
+        thresh, mask = cv2.threshold(img, thresh=5, maxval=1, type=cv2.THRESH_BINARY)
+    mask = extract_largest_object_mask(mask)
+    mask_pct = mask_pct_foreground(mask)
+    if mask_pct < 0.8:
+        ksize = round(get_length_scale(mask) / 10.0)
+        kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(ksize, ksize))
+        mask_candidate = cv2.morphologyEx(mask, op=cv2.MORPH_OPEN, kernel=kernel, iterations=2)
+        delta = mask_pct_foreground(mask_candidate) - mask_pct
+        if delta > 0.0:
+            logger.info(f"Improved mask foreground by {delta:.1%} using ksize {ksize}")
+            mask = extract_largest_object_mask(mask_candidate)
+    return mask
 
 
 def crop_and_mask(img: npt.NDArray[np.uint8], mask: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
     x, y, w, h = cv2.boundingRect(mask)
-    cropped = img[y : y + h, x : x + w, ...]
+    cropped = img[y : y + h, x : x + w]
     mask = mask[y : y + h, x : x + w]
-    return cropped * np.broadcast_to(mask, shape=cropped.shape)
+    return cropped * mask
 
 
-def pad_images(images: List[torch.Tensor]) -> torch.Tensor:
+def pad_ragged_image_batch(images: List[torch.Tensor]) -> torch.Tensor:
     # https://discuss.pytorch.org/t/whats-the-fastest-way-to-prepare-a-batch-from-different-sized-images-by-padding/119568
     max_h = max([img.shape[-2] for img in images])
     max_w = max([img.shape[-1] for img in images])
@@ -109,5 +139,7 @@ def pad_images(images: List[torch.Tensor]) -> torch.Tensor:
 
 
 def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+    # convert list of dicts to dict of lists
     batch: Dict[str, List[Any]] = {k: [elem[k] for elem in batch] for k in batch[0].keys()}
-    return {k: pad_images(v) if k in ["CC", "MLO"] else default_collate(v) for k, v in batch.items()}
+    # collate each dict item
+    return {k: pad_ragged_image_batch(v) if k in ["CC", "MLO"] else default_collate(v) for k, v in batch.items()}

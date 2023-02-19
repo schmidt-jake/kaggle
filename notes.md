@@ -1,5 +1,7 @@
 # Notes
 
+RSNA Breast Cancer competition source data GCS path: `gs://kds-93187e560c991ac18dcbcb5b4e86d922f1b4d72992dc07be698e602b`
+
 ## DICOM format edge cases
 
 1. Pixels are in 8-bit range, but window is a different bit depth, VOI LUT fn is none/linear. [Example](mammography/data/raw/train_images/32553/83977.dcm). Applying windowing will change the dtype to `float64` *and may shift the pixels by 1*.
@@ -7,6 +9,22 @@
 1. Low pixel range. Only affects image 1942326353. [Example](mammography/data/raw/train_images/822/1942326353.dcm)
 
 ## Visual edge cases
+
+197998560 — just weird, probably unusable
+1634189725 — ^
+802890376 — unusable without manual cropping
+936880795 — unusable without manual cropping
+1074322983 — unusable without manual cropping
+1249735234 — unusable without manual cropping
+1839672250 — weird artifact, needs manual cropping
+
+1189630231 — horizontal lines
+764545189 — horizontal lines
+
+682364838 — weird shadow effect?
+2011677381 — ^
+
+743466894 — weird vertical line
 
 1. Low contrast
     1. 858907922 — implant
@@ -19,6 +37,11 @@
     1. 1428845821
     1. 2121614268
     1. 2051385093
+    1. 1521956184
+    1. 1223335281
+    1. 1181635673
+    1. 871227326
+    1. 381072284
 1. Artificial border
     1. 47305213
     1. 42887848
@@ -31,6 +54,21 @@
     1. 1942326353 — all zeros
     1. 495314563 — high background value
     1. 1760744211 — two bright horizontal stripes
+    1. 764545189 — two bright horizontal stripes
+    1. 597771506 — pacemaker
+    1. 355971526 — pacemaker
+    1. 189841090 — pacemaker
+    1. 213706302 — pacemaker
+    1. 321321852 — pacemaker
+    1. 330666379 — pacemaker
+    1. 355971526 — pacemaker
+    1. 412697751 — pacemaker
+    1. 613969302 — pacemaker
+    1. 744730557 — pacemaker
+    1. 748668947 — idk
+    1. 800715529 — pacemaker
+1. Possible false negative implant
+    1. see [`implants.json`](implants.json)
 
 ## Kaggle compute resources
 
@@ -97,3 +135,9 @@ Next up:
 1. If available, use more/all additional instances of each CC/MLO view
     1. First, explore what these additional views look like
 1. Train on raw data (no VOI LUT)
+
+## Other Notes
+
+- Site 2 has no `density` data.
+- `age` can be NaN.
+- `machine_id`s 190, 1070, and 216 are missing `PixelPaddingValue` for all images. All other `machine_id`s have `PixelPaddingValue` for all images.

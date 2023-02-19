@@ -36,25 +36,13 @@ def find_filepath(image_id: int, glob_pattern: str = "mammography/data/raw/train
     raise ValueError(f"Found no filepath={filepath}")
 
 
-def maybe_flip_left(arr: npt.NDArray) -> npt.NDArray:
-    """
-    Flips `arr` horizontally if the sum of pixels on its left half is greater than its right.
-    """
-    # Standardize image laterality using pixel values b/c ImageLaterality meta is inaccurate
-    split = arr.shape[-1] // 2
-    left, right = arr[..., :split], arr[..., split:]
-    if left.sum() > right.sum():
-        arr = arr[..., ::-1].copy()
-    return arr
-
-
 def get_suspected_bit_depth(pixel_value: int) -> int:
     """
     Returns the smallest even base-2 exponent that is larger than `pixel_value + 1`.
     """
     suspected_bit_depth = np.ceil(np.log2(pixel_value + 1))
     suspected_bit_depth += suspected_bit_depth % 2
-    return suspected_bit_depth.astype(np.float32)
+    return suspected_bit_depth
 
 
 # def maybe_invert(arr: npt.NDArray, dcm: FileDataset) -> npt.NDArray:

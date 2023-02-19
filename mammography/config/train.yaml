@@ -56,10 +56,10 @@ datamodule:
   _target_: mammography.src.data.datamodule.DataModule
   image_dir: ???
   metadata_paths:
-    train: ${datamodule.image_dir}/train.csv
-    val: ${datamodule.image_dir}/val.csv
-  train_batch_size: 2
-  inference_batch_size: 8
+    train: ${datamodule.image_dir}/train.json
+    val: ${datamodule.image_dir}/val.json
+  train_batch_size: 10
+  inference_batch_size: 16
   prefetch_factor: 5
   augmentation:
     _target_: torch.nn.Sequential
@@ -68,9 +68,9 @@ datamodule:
       # - _target_: mammography.src.data.transforms.CropCenterRight
       #   height: 3000
       #   width: 2000
-      - _target_: torchvision.transforms.Resize
-        size: 511
-        max_size: 512
+      # - _target_: torchvision.transforms.Resize
+      #   size: 511
+      #   max_size: 512
       # - _target_: mammography.src.data.CLAHE
       #   clipLimit: 2.0
       #   tileGridSize: [32, 32]
@@ -88,6 +88,23 @@ datamodule:
       #     - 0.2
       # - _target_: torchvision.transforms.CenterCrop
       #   size: 512
+  resizer:
+    _target_: mammography.src.data.transforms.ResizeLookup
+    lookup_table:
+      21: 0.47919092100021615
+      29: 0.26131120123586693
+      48: 0.31130864310021933
+      49: 0.33649462625088383
+      93: 0.4776470506067665
+      170: 0.35170585038041563
+      190: 0.5138467491903878
+      197: 0.5735921797664861
+      210: 0.26051742179411685
+      216: 0.5442852854636264
+  cropper:
+    _target_: mammography.src.data.transforms.CropCenterRight
+    height: 512
+    width: 300
 model:
   _target_: mammography.src.model.lightning_module.Model
   optimizer_config:
@@ -112,8 +129,8 @@ model:
     _target_: mammography.src.loss.MultiLoss
     cancer:
       _target_: torch.nn.BCEWithLogitsLoss
-    density:
-      _target_: torch.nn.BCEWithLogitsLoss
+    # density:
+    #   _target_: torch.nn.BCEWithLogitsLoss
   net:
     _target_: mammography.src.model.modules.Network
     image_fuser:
@@ -124,6 +141,9 @@ model:
           - _target_: torchvision.models.efficientnet_b6
             weights: IMAGENET1K_V1
           - features
+      pool:
+        _target_: torch.nn.AdaptiveMaxPool2d
+        output_size: 4
       neck:
         _target_: torch.nn.Sequential
         _args_:

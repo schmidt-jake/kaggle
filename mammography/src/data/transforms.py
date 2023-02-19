@@ -1,8 +1,10 @@
+import json
+from typing import Dict, Optional, Type
+
 import cv2
 import numpy.typing as npt
 import torch
-
-from mammography.src.data import utils
+from torchvision.transforms.functional_tensor import resize
 
 
 class MinMaxScale(torch.nn.Module):
@@ -48,7 +50,6 @@ class ToTensor(torch.nn.Module):
     """
     Very similar to `torchvision.transforms.ToTensor`, except doesn't alter data (dtype or values).
     Converts channels-last to channels-first. Adds a leading channel dimension if necessary.
-    Also expands to 3 channels.
     """
 
     def forward(self, x: npt.NDArray) -> torch.Tensor:
@@ -56,11 +57,10 @@ class ToTensor(torch.nn.Module):
         if t.ndim == 2:
             t.unsqueeze_(dim=0)
         elif t.ndim == 3:
-            if t.size(2) <= 4:
-                t = t.permute(2, 0, 1)
+            t = t.permute(2, 0, 1)
         else:
             raise RuntimeError(f"Invalid shape: {t.shape}")
-        return t[:3, ...].expand(3, -1, -1)
+        return t
 
 
 class CropCenterRight(torch.nn.Module):
@@ -70,4 +70,44 @@ class CropCenterRight(torch.nn.Module):
         self.width = width
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        return utils.crop_right_center(img=img, height=self.height, width=self.width)
+        h, w = img.shape[-2:]
+        if w > self.width:
+            x_slice = slice(w - self.width, None)
+        else:
+            x_slice = slice(None)
+        if h > self.height:
+            dy = round((h - self.height) / 2)
+            y_slice = slice(dy, dy + self.height)
+        else:
+            y_slice = slice(None)
+        return img[..., y_slice, x_slice]
+
+
+class ResizeLookup(torch.nn.Module):
+    def __init__(self, lookup_table: Dict[str, float], default: Optional[float] = None) -> None:
+        super().__init__()
+        self.lookup_table = lookup_table
+        self.default = default
+
+    def forward(self, img: torch.Tensor, key: str, **kwargs) -> torch.Tensor:
+        scale = self.lookup_table.get(key, self.default)
+        if scale is None:
+            raise KeyError(f"Key {key} not in lookup table and default is None.")
+        size = (round(scale * img.size(-2)), round(scale * img.size(-1)))
+        return resize(img=img, size=size, **kwargs)
+
+    def resize(self, d: Dict, key: str) -> torch.Tensor:
+        return self(img=d[key], key=d["machine_id"])
+
+    def get_extra_state(self) -> Dict:
+        return {"lookup_table": self.lookup_table}
+
+    def set_extra_state(self, state) -> None:
+        self.lookup_table = state["lookup_table"]
+
+    @classmethod
+    def from_json(cls: Type["ResizeLookup"], filepath: str, scale_factor: float) -> "ResizeLookup":
+        with open(filepath, mode="r") as f:
+            lookup_table = json.load(f)
+        lookup_table = scale_factor / lookup_table
+        return cls(lookup_table=lookup_table)
