@@ -59,7 +59,7 @@ datamodule:
     train: ${datamodule.image_dir}/train.json
     val: ${datamodule.image_dir}/val.json
   train_batch_size: 10
-  inference_batch_size: 16
+  inference_batch_size: 20
   prefetch_factor: 5
   augmentation:
     _target_: torch.nn.Sequential
@@ -101,6 +101,7 @@ datamodule:
       197: 0.5735921797664861
       210: 0.26051742179411685
       216: 0.5442852854636264
+    default: 0.4109899928788986
   cropper:
     _target_: mammography.src.data.transforms.CropCenterRight
     height: 512
@@ -153,7 +154,7 @@ model:
           # - _target_: torch.nn.LazyBatchNorm2d
           # - _target_: torch.nn.ReLU
           #   inplace: true
-          - _target_: torch.nn.AdaptiveAvgPool2d
+          - _target_: torch.nn.AdaptiveMaxPool2d
             output_size: 1
           - _target_: torch.nn.Flatten
     neck:

@@ -95,19 +95,3 @@ class ResizeLookup(torch.nn.Module):
             raise KeyError(f"Key {key} not in lookup table and default is None.")
         size = (round(scale * img.size(-2)), round(scale * img.size(-1)))
         return resize(img=img, size=size, **kwargs)
-
-    def resize(self, d: Dict, key: str) -> torch.Tensor:
-        return self(img=d[key], key=d["machine_id"])
-
-    def get_extra_state(self) -> Dict:
-        return {"lookup_table": self.lookup_table}
-
-    def set_extra_state(self, state) -> None:
-        self.lookup_table = state["lookup_table"]
-
-    @classmethod
-    def from_json(cls: Type["ResizeLookup"], filepath: str, scale_factor: float) -> "ResizeLookup":
-        with open(filepath, mode="r") as f:
-            lookup_table = json.load(f)
-        lookup_table = scale_factor / lookup_table
-        return cls(lookup_table=lookup_table)

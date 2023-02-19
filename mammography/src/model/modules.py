@@ -12,6 +12,7 @@ class ImageFuser(torch.nn.Module):
         """
         super().__init__()
         self.feature_extractor = feature_extractor
+        self.feature_extractor[0][0].weight.data = self.feature_extractor[0][0].weight.data[:, [0], ...]
         self.neck = neck
         self.pool = pool
 
@@ -19,8 +20,8 @@ class ImageFuser(torch.nn.Module):
         if img.size(1) > 3:
             img = img[:, :3, ...]
         img = convert_image_dtype(img, dtype=torch.half if img.is_cuda else torch.float)
-        if img.size(1) == 1:
-            img = img.expand(-1, 3, -1, -1)
+        # if img.size(1) == 1:
+        #     img = img.expand(-1, 3, -1, -1)
         return img
 
     def forward(self, *imgs: torch.Tensor) -> torch.Tensor:

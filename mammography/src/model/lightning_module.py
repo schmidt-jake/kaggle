@@ -166,7 +166,7 @@ class Model(pl.LightningModule):
         assert decay_params.isdisjoint(no_decay_params)
         assert decay_params.union(no_decay_params) == params.keys()
 
-        logger.info(f"Applying weight decay to {len(decay_params)/len(params):.2%} of all parameters")
+        logger.info(f"Applying weight decay to {len(decay_params)/len(params):.1%} of all parameters")
 
         return [
             {"name": "weight_decay", "params": [params[p] for p in decay_params], "weight_decay": weight_decay},

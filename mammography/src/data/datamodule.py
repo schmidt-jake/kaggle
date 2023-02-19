@@ -61,7 +61,7 @@ class DataModule(LightningDataModule):
             logger.warning(f"Unable to use artifact when in {self.trainer.logger.experiment.mode} mode")
 
     def setup(self, stage: str) -> None:
-        self.meta = {k: pd.read_json(v) for k, v in self.metadata_paths.items()}
+        self.meta = {k: pd.read_json(v, orient="records") for k, v in self.metadata_paths.items()}
         if stage == "fit":
             # class_weights = 1.0 / self.df["cancer"].value_counts(normalize=True)
             class_weights = {0: 1.0, 1: 3.0}
@@ -110,6 +110,8 @@ class DataModule(LightningDataModule):
             fns.extend(
                 [
                     (np.random.choice, view, view),
+                    (itemgetter("machine_id"), view, f"{view}_machine_id"),
+                    (itemgetter("image_id"), view, view),
                     (
                         partial(
                             utils.get_filepath,
@@ -121,11 +123,11 @@ class DataModule(LightningDataModule):
                     (process_dicom, view, view),
                     # (itemgetter(0), view, view),
                     (self.augmentation, view, view),
-                    (partial(self.resizer.resize, key=view), None, view),
+                    (partial(self._resize, view=view, key=f"{view}_machine_id"), None, view),
                     (self.cropper, view, view),
                 ]
             )
-        fns.append((partial(utils.select_keys, keys={"cancer", "CC", "MLO", "prediction_id", "age"}), None, None))
+        fns.append((partial(utils.select_keys, keys={"CC", "MLO", "prediction_id"}), None, None))
         pipe = DataframeDataPipe(df=self.meta["predict"], fns=fns)
         dataloader = DataLoader(
             dataset=pipe,
@@ -140,6 +142,9 @@ class DataModule(LightningDataModule):
         )
         return dataloader
 
+    def _resize(self, data: Dict, view: str, key: str) -> torch.Tensor:
+        return self.resizer(img=data[view], key=data[key])
+
     def train_val_fns(self) -> List[Callable]:
         fns = []
 
@@ -147,10 +152,12 @@ class DataModule(LightningDataModule):
             fns.extend(
                 [
                     (np.random.choice, view, view),
+                    (itemgetter("machine_id"), view, f"{view}_machine_id"),
+                    (itemgetter("image_id"), view, view),
                     (partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}.png")), None, view),
                     (utils.read_png, view, view),
                     (self.augmentation, view, view),
-                    (partial(self.resizer.resize, key=view), None, view),
+                    (partial(self._resize, view=view, key=f"{view}_machine_id"), None, view),
                     (self.cropper, view, view),
                 ]
             )

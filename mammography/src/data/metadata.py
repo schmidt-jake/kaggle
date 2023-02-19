@@ -19,24 +19,16 @@ def fix_dtypes(meta: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
+    def agg(df: pd.DataFrame) -> pd.Series:
+        return df[["machine_id", "image_id"]].to_dict("records")
+
     # only select the standard CC and MLO views
     views = meta.loc[meta["view"].isin(["CC", "MLO"]), :]
-    breasts = pd.pivot_table(
-        views, index=["prediction_id", "machine_id"], columns="view", values="image_id", aggfunc=list
-    ).reset_index()
-    breasts = breasts.merge(
-        views.drop(["image_id", "view"], axis=1).drop_duplicates(["prediction_id", "machine_id"]),
-        on=["prediction_id", "machine_id"],
-        validate="1:1",
-        how="left",
+    breast_meta = views.groupby(["prediction_id", "view"]).apply(agg).unstack("view").reset_index("prediction_id")
+    breast_meta = breast_meta.merge(
+        views.drop(["image_id", "machine_id", "view"], axis=1), on="prediction_id", how="left", validate="1:m"
     )
-    breasts.dropna(subset=["CC", "MLO"], inplace=True, how="any")
-    breasts.drop_duplicates("prediction_id", inplace=True)
-    # if set(views["prediction_id"]) != set(breasts["prediction_id"]):
-    #     raise ValueError("Missing prediction IDs!")
-    breasts.sort_values("prediction_id", inplace=True)
-    breasts = fix_dtypes(breasts)
-    return breasts
+    return breast_meta
 
 
 def main(input_filepath: str, output_filepath: str) -> None:
@@ -66,8 +58,8 @@ def main(input_filepath: str, output_filepath: str) -> None:
     # train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
     # val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
 
-    train_breasts.to_json(os.path.join(output_filepath, "train.json"))
-    val_breasts.to_json(os.path.join(output_filepath, "val.json"))
+    train_breasts.to_json(os.path.join(output_filepath, "train.json"), orient="records")
+    val_breasts.to_json(os.path.join(output_filepath, "val.json"), orient="records")
 
 
 if __name__ == "__main__":
