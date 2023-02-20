@@ -7,10 +7,10 @@ trainer:
     - _target_: mammography.src.submit.SubmissionWriter
       write_interval: epoch
       output_filepath: submission.csv
-    - _target_: mammography.src.train.BatchSizeFinder
-      inference:
-        mode: binsearch
-        batch_arg_name: inference_batch_size
+    # - _target_: mammography.src.train.BatchSizeFinder
+    #   inference:
+    #     mode: binsearch
+    #     batch_arg_name: inference_batch_size
 datamodule:
   _target_: mammography.src.data.datamodule.DataModule.load_from_checkpoint
   checkpoint_path: ${ckpt_path}
@@ -18,6 +18,7 @@ datamodule:
   metadata_paths:
     predict: ???
   prefetch_factor: 4
+  inference_batch_size: 4
 model:
   _target_: mammography.src.model.lightning_module.Model.load_from_checkpoint
   checkpoint_path: ${ckpt_path}
