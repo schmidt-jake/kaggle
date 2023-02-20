@@ -58,9 +58,9 @@ datamodule:
   metadata_paths:
     train: ${datamodule.image_dir}/train.json
     val: ${datamodule.image_dir}/val.json
-  train_batch_size: 10
-  inference_batch_size: 20
-  prefetch_factor: 5
+  train_batch_size: 11
+  inference_batch_size: 22
+  prefetch_factor: 55
   augmentation:
     _target_: torch.nn.Sequential
     _args_:
@@ -144,7 +144,7 @@ model:
           - features
       pool:
         _target_: torch.nn.AdaptiveMaxPool2d
-        output_size: 4
+        output_size: 1
       neck:
         _target_: torch.nn.Sequential
         _args_:

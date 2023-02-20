@@ -1,13 +1,10 @@
-# other stuff
-# functorch<1.13.0  # compatible with torch 1.12.1
-# functorch==0.1.1  # compatible with torch 1.11
-# functorch
+# functorch[aot]
 hydra-core
 opencv-python-headless
 pandas
 pytorch-lightning
-torch
-torchdata
+torch==1.12.0
+# torchdata
 torchmetrics
 torchvision
 wandb

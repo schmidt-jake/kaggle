@@ -76,7 +76,7 @@ def invert_mask(img: npt.NDArray, mask: npt.NDArray):
 
 
 def process_dicom(
-    filepath: str, raw: bool = False, output_bit_depth: int = 8, scale_factor: float = 1 / 4
+    filepath: str, raw: bool = False, output_bit_depth: int = 8, scale_factor: float = 1 / 2
 ) -> npt.NDArray[np.uint]:
     dcm = dicomsdl.open(filepath)
     arr: npt.NDArray = dcm.pixelData(storedvalue=True)

@@ -25,9 +25,14 @@ def get_breast_metadata(meta: pd.DataFrame) -> pd.DataFrame:
     # only select the standard CC and MLO views
     views = meta.loc[meta["view"].isin(["CC", "MLO"]), :]
     breast_meta = views.groupby(["prediction_id", "view"]).apply(agg).unstack("view").reset_index("prediction_id")
+
     breast_meta = breast_meta.merge(
-        views.drop(["image_id", "machine_id", "view"], axis=1), on="prediction_id", how="left", validate="1:m"
+        views.drop(["image_id", "machine_id", "view"], axis=1).drop_duplicates("prediction_id"),
+        on="prediction_id",
+        how="left",
+        validate="1:m",
     )
+    assert not breast_meta.duplicated("prediction_id").any()
     return breast_meta
 
 
@@ -54,6 +59,8 @@ def main(input_filepath: str, output_filepath: str) -> None:
     train_ix, val_ix = train_test_split(breasts.index, test_size=0.2, random_state=42, stratify=stratify)
     train_breasts = breasts.loc[train_ix]
     val_breasts = breasts.loc[val_ix]
+
+    assert set(train_breasts["prediction_id"]).isdisjoint(set(val_breasts["prediction_id"]))
 
     # train_breasts.to_pickle("gs://rnsa-kaggle/data/png/train.pickle")
     # val_breasts.to_pickle("gs://rnsa-kaggle/data/png/val.pickle")
