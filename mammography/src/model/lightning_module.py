@@ -79,6 +79,8 @@ class Model(pl.LightningModule):
             set_metrics(self)
             # self._init_metrics()
             self.cancer_base_rate = self.trainer.datamodule.meta["train"]["cancer"].mean()
+        elif stage == "predict":
+            self.net = torch.jit.optimize_for_inference(torch.jit.script_if_tracing(self.net))
 
     def forward(self, **imgs: torch.Tensor) -> torch.Tensor:
         return self.net(**imgs)
