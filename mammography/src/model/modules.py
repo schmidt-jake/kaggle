@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 import torch
 from torchvision.transforms.functional import convert_image_dtype
@@ -24,7 +24,7 @@ class ImageFuser(torch.nn.Module):
         #     img = img.expand(-1, 3, -1, -1)
         return img
 
-    def forward(self, *imgs: torch.Tensor) -> torch.Tensor:
+    def forward(self, imgs: List[torch.Tensor]) -> torch.Tensor:
         """
         Inputs should be tensors with shape = `(N, C, H, W)` and dtype `uint`.
         """
@@ -39,8 +39,8 @@ class Network(torch.nn.Module):
         self.image_fuser = image_fuser
         self.neck = neck
 
-    def forward(self, **imgs: torch.Tensor) -> Dict[str, torch.Tensor]:
-        img_features: torch.Tensor = self.image_fuser(*imgs.values())
+    def forward(self, imgs: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+        img_features: torch.Tensor = self.image_fuser(imgs)
         cancer_logit: torch.Tensor = self.neck(img_features)
         return {"cancer": cancer_logit.squeeze(dim=1)}
 
@@ -50,8 +50,8 @@ class Network2(Network):
         super().__init__(**kwargs)
         self.density_predictor = torch.nn.LazyLinear(out_features=1)
 
-    def forward(self, age: torch.Tensor, **imgs: torch.Tensor) -> Dict[str, torch.Tensor]:
-        img_features: torch.Tensor = self.image_fuser(*imgs.values())
+    def forward(self, age: torch.Tensor, imgs: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+        img_features: torch.Tensor = self.image_fuser(imgs)
         density_logit: torch.Tensor = self.density_predictor(img_features)
         cancer_logit: torch.Tensor = self.neck(torch.cat([img_features, age, density_logit.sigmoid()], dim=1))
         return {"cancer": cancer_logit.squeeze(dim=1), "density": density_logit.squeeze(dim=1)}

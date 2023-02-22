@@ -79,11 +79,12 @@ class Model(pl.LightningModule):
             set_metrics(self)
             # self._init_metrics()
             self.cancer_base_rate = self.trainer.datamodule.meta["train"]["cancer"].mean()
-        elif stage == "predict":
-            self.net = torch.jit.optimize_for_inference(torch.jit.script(self.net))
 
-    def forward(self, **imgs: torch.Tensor) -> torch.Tensor:
-        return self.net(**imgs)
+    def on_predict_start(self) -> None:
+        self.net = torch.jit.optimize_for_inference(torch.jit.script(self.net))
+
+    def forward(self, cc: torch.Tensor, mlo: torch.Tensor) -> torch.Tensor:
+        return self.net([cc, mlo])
 
     def get_extra_state(self) -> Dict[str, Any]:
         return {k: getattr(self, k) for k in {"cancer_base_rate"}}

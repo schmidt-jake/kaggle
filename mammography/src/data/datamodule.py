@@ -5,19 +5,37 @@ from operator import itemgetter
 from typing import Callable, Dict, List
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import torch
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
+from pytorch_lightning.trainer.states import RunningStage
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from mammography.src.data import utils
 from mammography.src.data.dataset import DataframeDataPipe
-from mammography.src.data.transforms import CropCenterRight, ResizeLookup
+from mammography.src.data.transforms import CropCenterRight, ResizeLookup, ToTensor
 
 logger = logging.getLogger(__name__)
+
+
+class Augmenter(torch.nn.Module):
+    def __init__(self, train: torch.nn.Module, val: torch.nn.Module) -> None:
+        super().__init__()
+        self.to_tensor = ToTensor()
+        self.training_augmentation = train
+        self.val_augmentation = val
+
+    def forward(self, x: npt.NDArray) -> torch.Tensor:
+        x: torch.Tensor = self.to_tensor(x)
+        if self.training:
+            x = self.training_augmentation(x)
+        else:
+            x = self.val_augmentation(x)
+        return x
 
 
 class DataModule(LightningDataModule):
@@ -25,10 +43,10 @@ class DataModule(LightningDataModule):
         self,
         metadata_paths: Dict[str, str],
         image_dir: str,
-        augmentation: DictConfig,
         train_batch_size: int,
         inference_batch_size: int,
         prefetch_factor: int,
+        augmentation: DictConfig,
         resizer: DictConfig,
         cropper: DictConfig,
     ) -> None:
@@ -156,7 +174,7 @@ class DataModule(LightningDataModule):
                     (itemgetter("image_id"), view, view),
                     (partial(utils.get_filepath, template=os.path.join(self.image_dir, f"{{{view}}}.png")), None, view),
                     (utils.read_png, view, view),
-                    (self.augmentation, view, view),
+                    (self.augmentation.train(mode=self.trainer.state.stage == RunningStage.TRAINING), view, view),
                     (partial(self._resize, view=view, key=f"{view}_machine_id"), None, view),
                     (self.cropper, view, view),
                 ]
